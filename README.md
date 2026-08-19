@@ -16,6 +16,7 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 | `tcmips_guess` | 猜数字 0~9999,尝试次数与答案显示在七段数码管 | ASCII 屏键盘输入 |
 | `tcmips_reaction` | 反应速度测试:等待 "NOW!" 出现后按键,微秒级计时 | 任意键,Q 退出 |
 | `tcmips_clock` | 电子钟:天数 + 时:分:秒 | Q 退出 |
+| `tcmips_life` | 康威生命游戏:80x60 环形网格,活细胞按代龄着色,可游标编辑 | 方向键移动,Enter 画/擦,Space 运行/暂停,S 单步,R 随机,C 清空,Q 退出 |
 
 ## 目录结构
 
@@ -29,7 +30,8 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
     ├── breakout.cpp                # 打砖块
     ├── guess.cpp                   # 猜数字
     ├── reaction.cpp                # 反应速度测试
-    └── clock.cpp                   # 电子钟
+    ├── clock.cpp                   # 电子钟
+    └── life.cpp                    # 生命游戏
 ```
 
 ## 构建
