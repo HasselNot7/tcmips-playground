@@ -59,15 +59,6 @@ cmake --build build
 
 构建产物 `build/tcmips_*.tcm` 即为可加载的固件镜像。
 
-## 外设 API
-
-所有外设头文件位于 `toolchains/sysroot/usr/include/dev/`:
-
-- `console.h` — 像素屏(`CONSOLE_MODE_PIXEL_32`,VRAM 直接写入 `RGB888`,分辨率 4:3)与 ASCII 文本屏
-- `keyboard.h` — 键盘扫描码(方向键 1~4,Enter 10 等)
-- `seven_segment_display.h` — 上下两组 8 位七段数码管(十六进制/十进制)
-- `syscall.h` — Unix 时间戳(秒/毫秒/微秒/纳秒)、syscall 直通接口
-
 ## 注意事项
 
 - C++ 编译时禁用了异常与 RTTI(`-fno-exceptions -fno-rtti`)
