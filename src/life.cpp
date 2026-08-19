@@ -8,9 +8,9 @@
 #include "tcm_util.h"
 
 enum {
-  COLS = 80,
-  ROWS = 60,
-  CELL = 4,
+  COLS = 160,
+  ROWS = 120,
+  CELL = 2,
   SCREEN_W = COLS * CELL,
   SCREEN_H = ROWS * CELL,
 };

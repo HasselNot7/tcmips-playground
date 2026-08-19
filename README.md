@@ -6,6 +6,11 @@
 TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像素屏、ASCII 文本屏、
 键盘、双排八位七段数码管、Unix 时间戳 syscall。
 
+## 演示
+![康威的生命游戏](asset/Conway.gif)
+
+![中国象棋](asset/xiangqi.png)
+
 ## 项目列表
 
 | 可执行文件 | 说明 | 操作 |
@@ -17,6 +22,7 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 | `tcmips_reaction` | 反应速度测试:等待 "NOW!" 出现后按键,微秒级计时 | 任意键,Q 退出 |
 | `tcmips_clock` | 电子钟:天数 + 时:分:秒 | Q 退出 |
 | `tcmips_life` | 康威生命游戏:80x60 环形网格,活细胞按代龄着色,可游标编辑 | 方向键移动,Enter 画/擦,Space 运行/暂停,S 单步,R 随机,C 清空,Q 退出 |
+| `tcmips_xiangqi` | 中国象棋人机对战:完整规则 + α-β 剪枝搜索 AI,可选深度 | 方向键移动,Enter 选子/落子,退格取消,1-4 调 AI 深度,R 重开,Q 退出 |
 
 ## 目录结构
 
@@ -32,6 +38,7 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
     ├── reaction.cpp                # 反应速度测试
     ├── clock.cpp                   # 电子钟
     └── life.cpp                    # 生命游戏
+    └── xiangqi.cpp                 # 中国象棋 AI
 ```
 
 ## 构建
