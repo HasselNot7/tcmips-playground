@@ -62,6 +62,11 @@ cmake --build build
 
 构建产物 `build/tcmips_*.tcm` 即为可加载的固件镜像。
 
+## 致谢
+
+本项目基于 [zhangjiantao/tcmips](https://github.com/zhangjiantao/tcmips) 的 TCMIPS CPU 架构、
+交叉编译工具链与 sysroot 开发,原作者为 [zhangjiantao](https://github.com/zhangjiantao)。
+
 ## 注意事项
 
 - C++ 编译时禁用了异常与 RTTI(`-fno-exceptions -fno-rtti`)
