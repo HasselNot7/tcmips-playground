@@ -1,0 +1,14 @@
+# IDE
+.idea/
+
+# CLion 构建目录
+cmake-build-*/
+
+# 命令行构建目录(见 README)
+build/
+
+# TCMIPS 工具链(体积大,单独下载)
+toolchains/
+
+# 系统文件
+.DS_Store

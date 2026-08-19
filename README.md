@@ -1,0 +1,75 @@
+# TCMIPS-C
+
+基于 TCMIPS 自定义 MIPS32 CPU(游戏 Turing Complete 内嵌架构)的 C/C++ 小项目集。
+
+使用官方 LLVM 交叉工具链把标准 C/C++ 源码编译为 `.tcm` 可执行文件,可直接在游戏内的
+TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像素屏、ASCII 文本屏、
+键盘、双排八位七段数码管、Unix 时间戳 syscall。
+
+## 项目列表
+
+| 可执行文件 | 说明 | 操作 |
+|-----------|------|------|
+| `tcmips_c` | Hello World 示例 | - |
+| `tcmips_snake` | 贪吃蛇:吃食物变长加速,分数/长度实时显示在七段数码管 | 方向键移动,Q 退出,R 重开 |
+| `tcmips_breakout` | 打砖块:三色砖块六关连闯,三条命 | 左右键移动挡板,上键发球,Q/R |
+| `tcmips_guess` | 猜数字 0~9999,尝试次数与答案显示在七段数码管 | ASCII 屏键盘输入 |
+| `tcmips_reaction` | 反应速度测试:等待 "NOW!" 出现后按键,微秒级计时 | 任意键,Q 退出 |
+| `tcmips_clock` | 电子钟:天数 + 时:分:秒 | Q 退出 |
+
+## 目录结构
+
+```
+.
+├── CMakeLists.txt                  # 构建配置(需指定工具链文件)
+├── main.cpp                        # Hello World
+└── src/
+    ├── tcm_util.h                  # 延时 / 随机数工具(基于时间戳 syscall)
+    ├── snake.cpp                   # 贪吃蛇
+    ├── breakout.cpp                # 打砖块
+    ├── guess.cpp                   # 猜数字
+    ├── reaction.cpp                # 反应速度测试
+    └── clock.cpp                   # 电子钟
+```
+
+## 构建
+
+需要 TCMIPS 官方工具链(见 <https://github.com/zhangjiantao/tcmips>),解压到项目根目录:
+
+```
+toolchains/
+├── cmake/tcmips.toolchain.cmake
+├── llvm/bin/{clang,clang++,llvm-link-tcmips}
+└── sysroot/
+```
+
+命令行构建:
+
+```bash
+cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=${PWD}/toolchains/cmake/tcmips.toolchain.cmake
+cmake --build build
+```
+
+或在 CLion 中创建 CMake 配置时,在 CMake 选项中传入:
+
+```
+-DCMAKE_TOOLCHAIN_FILE=${PWD}/toolchains/cmake/tcmips.toolchain.cmake
+```
+
+构建产物 `build/tcmips_*.tcm` 即为可加载的固件镜像。
+
+## 外设 API
+
+所有外设头文件位于 `toolchains/sysroot/usr/include/dev/`:
+
+- `console.h` — 像素屏(`CONSOLE_MODE_PIXEL_32`,VRAM 直接写入 `RGB888`,分辨率 4:3)与 ASCII 文本屏
+- `keyboard.h` — 键盘扫描码(方向键 1~4,Enter 10 等)
+- `seven_segment_display.h` — 上下两组 8 位七段数码管(十六进制/十进制)
+- `syscall.h` — Unix 时间戳(秒/毫秒/微秒/纳秒)、syscall 直通接口
+
+## 注意事项
+
+- C++ 编译时禁用了异常与 RTTI(`-fno-exceptions -fno-rtti`)
+- 目标为 `mipsel` MIPS32r2 软浮点,64 位整数与浮点由编译器 runtime 软件模拟
+- 各游戏共用 `src/tcm_util.h` 中基于时间戳 syscall 的忙等待延时(裸机环境无可靠 sleep)
