@@ -1,4 +1,4 @@
-# TCMIPS-C
+# TCMIPS-PlayGround
 
 基于 TCMIPS 自定义 MIPS32 CPU(游戏 Turing Complete 内嵌架构)的 C/C++ 小项目集。
 
