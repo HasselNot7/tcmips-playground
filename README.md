@@ -34,7 +34,10 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 
 ## 构建
 
-从本仓库 Release 页面下载打包好的 TCMIPS 工具链(`tcmips-2.1-toolchains-x86_64-linux-gnu.tar.xz`),解压到项目根目录:
+从本仓库 Release 页面下载打包好的 TCMIPS 工具链,按系统选择其一,解压到项目根目录:
+
+- `tcmips-2.1-toolchains-x86_64-linux-gnu.zip` — Linux
+- `tcmips-2.1-toolchains-x86_64-mingw64.zip` — Windows
 
 ```
 toolchains/
