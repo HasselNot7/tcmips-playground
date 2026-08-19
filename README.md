@@ -49,16 +49,12 @@ toolchains/
 命令行构建:
 
 ```bash
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_TOOLCHAIN_FILE=${PWD}/toolchains/cmake/tcmips.toolchain.cmake
+cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-或在 CLion 中创建 CMake 配置时,在 CMake 选项中传入:
-
-```
--DCMAKE_TOOLCHAIN_FILE=${PWD}/toolchains/cmake/tcmips.toolchain.cmake
-```
+> `CMakeLists.txt` 已内置 `CMAKE_TOOLCHAIN_FILE` 路径,只要工具链已解压到项目根目录,
+> 无需再手动指定。CLion 中同样直接创建一个 CMake 配置(生成器选 Ninja)即可构建。
 
 构建产物 `build/tcmips_*.tcm` 即为可加载的固件镜像。
 
