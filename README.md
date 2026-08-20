@@ -1,6 +1,6 @@
 # TCMIPS-PlayGround
 
-基于 TCMIPS 自定义 MIPS32 CPU(游戏 Turing Complete 内嵌架构)的 C/C++ 小项目集。
+基于 TCMIPS 自定义 MIPS32 CPU(游戏 Turing Complete)的 C/C++ 小项目集。
 
 使用官方 LLVM 交叉工具链把标准 C/C++ 源码编译为 `.tcm` 可执行文件,可直接在游戏内的
 TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像素屏、ASCII 文本屏、
