@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "tcm_util.h"
+#include "../common/tcm_util.h"
 
 enum { FILES = 9, RANKS = 10, RED = 0, BLACK = 1 };
 

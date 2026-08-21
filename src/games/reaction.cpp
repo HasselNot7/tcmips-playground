@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "tcm_util.h"
+#include "../common/tcm_util.h"
 
 int main() {
   uint32_t rng_state = tcm_rand_seed();

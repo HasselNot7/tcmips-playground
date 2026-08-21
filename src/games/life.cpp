@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "tcm_util.h"
+#include "../common/tcm_util.h"
 
 enum {
   COLS = 160,
