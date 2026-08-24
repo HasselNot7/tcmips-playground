@@ -7,8 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(tcmips_c main.cpp)
 add_executable(tcmips_snake src/games/snake.cpp)
-add_executable(tcmips_breakout src/games/breakout.cpp)
-add_executable(tcmips_guess src/games/guess.cpp)
 add_executable(tcmips_reaction src/games/reaction.cpp)
 add_executable(tcmips_clock src/tools/clock.cpp)
 add_executable(tcmips_life src/games/life.cpp)

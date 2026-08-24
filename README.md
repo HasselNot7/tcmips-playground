@@ -15,8 +15,6 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 | 可执行文件 | 说明 | 操作 |
 |-----------|------|------|
 | `tcmips_snake` | 贪吃蛇:吃食物变长加速,分数/长度实时显示在七段数码管 | 方向键移动,Q 退出,R 重开 |
-| `tcmips_breakout` | 打砖块:三色砖块六关连闯,三条命 | 左右键移动挡板,上键发球,Q/R |
-| `tcmips_guess` | 猜数字 0~9999,尝试次数与答案显示在七段数码管 | ASCII 屏键盘输入 |
 | `tcmips_reaction` | 反应速度测试:等待 "NOW!" 出现后按键,微秒级计时 | 任意键,Q 退出 |
 | `tcmips_clock` | 电子钟:天数 + 时:分:秒 | Q 退出 |
 | `tcmips_life` | 康威生命游戏:80x60 环形网格,活细胞按代龄着色,可游标编辑 | 方向键移动,Enter 画/擦,Space 运行/暂停,S 单步,R 随机,C 清空,Q 退出 |
@@ -38,8 +36,6 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
     │   └── clock.cpp               # 电子钟
     ├── games/
     │   ├── snake.cpp               # 贪吃蛇
-    │   ├── breakout.cpp            # 打砖块
-    │   ├── guess.cpp               # 猜数字
     │   ├── reaction.cpp            # 反应速度测试
     │   ├── life.cpp                # 生命游戏
     │   └── xiangqi.cpp             # 中国象棋 AI
