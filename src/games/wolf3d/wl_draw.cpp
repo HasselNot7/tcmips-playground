@@ -1656,9 +1656,4 @@ void    ThreeDRefresh (void)
         }
     }
 #endif
-    tcm_dbg_stage = 3;
-    {
-        static unsigned dbg_f = 0;
-        if ((++dbg_f & 31) == 1) tcm_dbg_mark('F');
-    }
 }

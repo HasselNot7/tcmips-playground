@@ -125,29 +125,6 @@ void SDL_Delay(Uint32 ms) { host_delay_ms(ms); }
 void SDL_Delay(Uint32 ms) {}
 #endif
 
-#ifndef HOST_TEST
-// device diagnostics: 8x8 status square, blinks per present; color = stage
-void tcm_present(void); // fwd already
-static void tcm_draw_dbg_square(void)
-{
-    static int blink = 0;
-    blink ^= 1;
-    if (!tcm_confb) return;
-    // stage: P=1 green, L=2 yellow, F=3 cyan, else red-ish; dim when not blinking
-    uint32_t col;
-    switch (tcm_dbg_stage)
-    {
-        case 1:  col = blink ? 0xFF00E000u : 0xFF002800u; break; // PM ok
-        case 2:  col = blink ? 0xFFE0E000u : 0xFF282800u; break; // level loaded
-        case 3:  col = blink ? 0xFF00E0E0u : 0xFF002828u; break; // frames rendering
-        default: col = blink ? 0xFFE00000u : 0xFF280000u; break; // booting
-    }
-    for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 8; x++)
-            tcm_confb[y * 320 + x] = col;
-}
-#endif
-
 static void BuildLUT(void)
 {
     for (int i = 0; i < 256; i++)

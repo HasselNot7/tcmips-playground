@@ -102,14 +102,6 @@ void PM_Startup()
     free(sizes);
     free(pageLengths);
     free(pageOffsets);
-    tcm_dbg_stage = 1;
-    tcm_dbg_mark('P');
-    {
-        bool allzero = true;
-        const uint8_t *p0 = PMPages[0];
-        for (int k = 0; k < 512; ++k) if (p0[k]) { allzero = false; break; }
-        tcm_dbg_mark(allzero ? 'Z' : 't');
-    }
 }
 
 

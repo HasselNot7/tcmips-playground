@@ -779,8 +779,6 @@ void SetupGameLevel (void)
 // are in memory
 //
     CA_LoadAllSounds ();
-    tcm_dbg_stage = 2;
-    tcm_dbg_mark('L');
 }
 
 
