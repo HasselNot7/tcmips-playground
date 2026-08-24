@@ -90,8 +90,9 @@ int main() {
   t.load_rom(rom.data, rom.size);
   t.swchb = 0x1F;
 
-  // Console power-on: hold the game-reset switch for the first frames so
-  // cartridges with a cold-start wait enter their title/demo state.
+  // Console power-on: let the cartridge warm up, then hold game-reset for
+  // a few frames. Some carts only sample the switch once running.
+  int reset_warmup = 30;
   int reset_latch = 5;
   while (true) {
     uint32_t code = tcm_keyboard_get_code();
@@ -102,11 +103,16 @@ int main() {
       t.reset();
       t.load_rom(rom.data, rom.size);
       t.swchb = 0x1F;
+      reset_warmup = 30;
       reset_latch = 5;
     } else if (code == 'f' || code == 'F') {
+      reset_warmup = 0;
       reset_latch = 20; // hold reset for ~20 frames
     }
-    if (reset_latch > 0) {
+    if (reset_warmup > 0) {
+      --reset_warmup;
+      t.swchb |= 0x01;
+    } else if (reset_latch > 0) {
       t.swchb &= ~0x01; // SWCHB bit0 = game reset (active low)
       --reset_latch;
     } else {
