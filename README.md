@@ -14,7 +14,6 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 
 | 可执行文件 | 说明 | 操作 |
 |-----------|------|------|
-| `tcmips_c` | Hello World 示例 | - |
 | `tcmips_snake` | 贪吃蛇:吃食物变长加速,分数/长度实时显示在七段数码管 | 方向键移动,Q 退出,R 重开 |
 | `tcmips_breakout` | 打砖块:三色砖块六关连闯,三条命 | 左右键移动挡板,上键发球,Q/R |
 | `tcmips_guess` | 猜数字 0~9999,尝试次数与答案显示在七段数码管 | ASCII 屏键盘输入 |
@@ -29,7 +28,6 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 ```
 .
 ├── CMakeLists.txt                  # 构建配置(已内置工具链路径)
-├── main.cpp                        # Hello World
 ├── asset/
 │   ├── conway.gif / xiangqi.png    # 演示图
 │   └── wolf3d/wolfdata.{h,cpp}     # Wolf3D 共享版 WL1 数据生成的嵌入数组(脚本生成物)
