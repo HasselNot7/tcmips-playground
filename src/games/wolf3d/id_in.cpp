@@ -1,0 +1,502 @@
+//
+//	ID Engine
+//	ID_IN.c - Input Manager
+//	v1.0d1
+//	By Jason Blochowiak
+//
+
+//
+//	This module handles dealing with the various input devices
+//
+//	Depends on: Memory Mgr (for demo recording), Sound Mgr (for timing stuff),
+//				User Mgr (for command line parms)
+//
+//	Globals:
+//		LastScan - The keyboard scan code of the last key pressed
+//		LastASCII - The ASCII value of the last key pressed
+//	DEBUG - there are more globals
+//
+
+#include "wl_def.h"
+
+
+/*
+=============================================================================
+
+					GLOBAL VARIABLES
+
+=============================================================================
+*/
+
+
+//
+// configuration variables
+//
+boolean MousePresent;
+boolean forcegrabmouse;
+
+
+// 	Global variables
+volatile boolean    Keyboard[SDLK_LAST];
+volatile boolean	Paused;
+volatile char		LastASCII;
+volatile ScanCode	LastScan;
+
+//KeyboardDef	KbdDefs = {0x1d,0x38,0x47,0x48,0x49,0x4b,0x4d,0x4f,0x50,0x51};
+static KeyboardDef KbdDefs = {
+    sc_Control,             // button0
+    sc_Alt,                 // button1
+    sc_Home,                // upleft
+    sc_UpArrow,             // up
+    sc_PgUp,                // upright
+    sc_LeftArrow,           // left
+    sc_RightArrow,          // right
+    sc_End,                 // downleft
+    sc_DownArrow,           // down
+    sc_PgDn                 // downright
+};
+
+static void *Joystick = NULL;
+int JoyNumButtons;
+static int JoyNumHats;
+
+static bool GrabInput = false;
+
+/*
+=============================================================================
+
+					LOCAL VARIABLES
+
+=============================================================================
+*/
+byte        ASCIINames[] =		// Unshifted ASCII for scan codes       // TODO: keypad
+{
+//	 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,8  ,9  ,0  ,0  ,0  ,13 ,0  ,0  ,	// 0
+    0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,27 ,0  ,0  ,0  ,	// 1
+	' ',0  ,0  ,0  ,0  ,0  ,0  ,39 ,0  ,0  ,'*','+',',','-','.','/',	// 2
+	'0','1','2','3','4','5','6','7','8','9',0  ,';',0  ,'=',0  ,0  ,	// 3
+	'`','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o',	// 4
+	'p','q','r','s','t','u','v','w','x','y','z','[',92 ,']',0  ,0  ,	// 5
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 6
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0		// 7
+};
+byte ShiftNames[] =		// Shifted ASCII for scan codes
+{
+//	 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,8  ,9  ,0  ,0  ,0  ,13 ,0  ,0  ,	// 0
+    0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,27 ,0  ,0  ,0  ,	// 1
+	' ',0  ,0  ,0  ,0  ,0  ,0  ,34 ,0  ,0  ,'*','+','<','_','>','?',	// 2
+	')','!','@','#','$','%','^','&','*','(',0  ,':',0  ,'+',0  ,0  ,	// 3
+	'~','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O',	// 4
+	'P','Q','R','S','T','U','V','W','X','Y','Z','{','|','}',0  ,0  ,	// 5
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 6
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0		// 7
+};
+byte SpecialNames[] =	// ASCII for 0xe0 prefixed codes
+{
+//	 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 0
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,13 ,0  ,0  ,0  ,	// 1
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 2
+	0  ,0  ,0  ,0  ,0  ,'/',0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 3
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 4
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 5
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,	// 6
+	0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0   	// 7
+};
+
+
+static	boolean		IN_Started;
+
+static	Direction	DirTable[] =		// Quick lookup for total direction
+{
+    dir_NorthWest,	dir_North,	dir_NorthEast,
+    dir_West,		dir_None,	dir_East,
+    dir_SouthWest,	dir_South,	dir_SouthEast
+};
+
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	INL_GetMouseButtons() - Gets the status of the mouse buttons from the
+//		mouse driver
+//
+///////////////////////////////////////////////////////////////////////////
+static int
+INL_GetMouseButtons(void)
+{
+    return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_GetJoyDelta() - Returns the relative movement of the specified
+//		joystick (from +/-127)
+//
+///////////////////////////////////////////////////////////////////////////
+void IN_GetJoyDelta(int *dx,int *dy)
+{
+    *dx = *dy = 0;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_GetJoyFineDelta() - Returns the relative movement of the specified
+//		joystick without dividing the results by 256 (from +/-127)
+//
+///////////////////////////////////////////////////////////////////////////
+void IN_GetJoyFineDelta(int *dx, int *dy)
+{
+    *dx = *dy = 0;
+}
+
+/*
+===================
+=
+= IN_JoyButtons
+=
+===================
+*/
+
+int IN_JoyButtons()
+{
+    return 0;
+}
+
+boolean IN_JoyPresent()
+{
+    return Joystick != NULL;
+}
+
+// TCMIPS keyboard: single-key polling (0 = no key).
+// Map TCMIPS key codes to engine SDLK codes.
+static uint32_t tcm_last_key = 0;
+
+uint32_t tcm_read_keyboard(void)
+{
+    return tcm_keyboard_get_code();
+}
+
+static int tcm_map_key(uint32_t code)
+{
+    switch (code)
+    {
+        case __TCM_KEY_CODE_UP:        return SDLK_UP;
+        case __TCM_KEY_CODE_DOWN:      return SDLK_DOWN;
+        case __TCM_KEY_CODE_LEFT:      return SDLK_LEFT;
+        case __TCM_KEY_CODE_RIGHT:     return SDLK_RIGHT;
+        case __TCM_KEY_CODE_TAB:       return SDLK_TAB;
+        case __TCM_KEY_CODE_ENTER:     return SDLK_RETURN;
+        case __TCM_KEY_CODE_DEL:       return SDLK_DELETE;
+        case __TCM_KEY_CODE_BACKSPACE: return SDLK_ESCAPE;   // no ESC key on TCMIPS: Backspace acts as ESC
+        case __TCM_KEY_CODE_CTRL:      return SDLK_LCTRL;
+        case __TCM_KEY_CODE_LSHIFT:    return SDLK_LSHIFT;
+        case __TCM_KEY_CODE_RSHIFT:    return SDLK_RSHIFT;
+        default:                       return (code < 128) ? (int)code : 0;
+    }
+}
+
+static void tcm_poll_keyboard(void)
+{
+    uint32_t code = tcm_read_keyboard();
+
+    if (code == tcm_last_key) return;   // no change
+
+    if (tcm_last_key && tcm_last_key < SDLK_LAST)
+        Keyboard[tcm_map_key(tcm_last_key)] = 0;
+
+    tcm_last_key = code;
+
+    if (!code) return;
+
+    int key = tcm_map_key(code);
+    if (!key || key >= SDLK_LAST) return;
+
+    Keyboard[key] = 1;
+    LastScan = key;
+
+    int sym = key;
+    if (sym >= 'a' && sym <= 'z') sym -= 32;
+    if (sym < lengthof(ASCIINames) && ASCIINames[sym])
+        LastASCII = ASCIINames[sym];
+}
+
+void IN_WaitAndProcessEvents()
+{
+    // Non-blocking platform: poll once.
+    tcm_poll_keyboard();
+}
+
+void IN_ProcessEvents()
+{
+    tcm_poll_keyboard();
+}
+
+//
+//	IN_Startup() - Starts up the Input Mgr
+//
+///////////////////////////////////////////////////////////////////////////
+void
+IN_Startup(void)
+{
+	if (IN_Started)
+		return;
+
+    IN_ClearKeysDown();
+    MousePresent = false;
+    Joystick = NULL;
+    IN_Started = true;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_Shutdown() - Shuts down the Input Mgr
+//
+///////////////////////////////////////////////////////////////////////////
+void
+IN_Shutdown(void)
+{
+	if (!IN_Started)
+		return;
+
+	IN_Started = false;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_ClearKeysDown() - Clears the keyboard array
+//
+///////////////////////////////////////////////////////////////////////////
+void
+IN_ClearKeysDown(void)
+{
+	LastScan = sc_None;
+	LastASCII = key_None;
+	memset ((void *) Keyboard,0,sizeof(Keyboard));
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_ReadControl() - Reads the device associated with the specified
+//		player and fills in the control info struct
+//
+///////////////////////////////////////////////////////////////////////////
+void
+IN_ReadControl(int player,ControlInfo *info)
+{
+	word		buttons;
+	int			dx,dy;
+	Motion		mx,my;
+
+	dx = dy = 0;
+	mx = my = motion_None;
+	buttons = 0;
+
+	IN_ProcessEvents();
+
+    if (Keyboard[KbdDefs.upleft])
+        mx = motion_Left,my = motion_Up;
+    else if (Keyboard[KbdDefs.upright])
+        mx = motion_Right,my = motion_Up;
+    else if (Keyboard[KbdDefs.downleft])
+        mx = motion_Left,my = motion_Down;
+    else if (Keyboard[KbdDefs.downright])
+        mx = motion_Right,my = motion_Down;
+
+    if (Keyboard[KbdDefs.up])
+        my = motion_Up;
+    else if (Keyboard[KbdDefs.down])
+        my = motion_Down;
+
+    if (Keyboard[KbdDefs.left])
+        mx = motion_Left;
+    else if (Keyboard[KbdDefs.right])
+        mx = motion_Right;
+
+    if (Keyboard[KbdDefs.button0])
+        buttons += 1 << 0;
+    if (Keyboard[KbdDefs.button1])
+        buttons += 1 << 1;
+
+	dx = mx * 127;
+	dy = my * 127;
+
+	info->x = dx;
+	info->xaxis = mx;
+	info->y = dy;
+	info->yaxis = my;
+	info->button0 = (buttons & (1 << 0)) != 0;
+	info->button1 = (buttons & (1 << 1)) != 0;
+	info->button2 = (buttons & (1 << 2)) != 0;
+	info->button3 = (buttons & (1 << 3)) != 0;
+	info->dir = DirTable[((my + 1) * 3) + (mx + 1)];
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_WaitForKey() - Waits for a scan code, then clears LastScan and
+//		returns the scan code
+//
+///////////////////////////////////////////////////////////////////////////
+ScanCode
+IN_WaitForKey(void)
+{
+	ScanCode	result;
+
+	while ((result = LastScan)==0)
+		IN_WaitAndProcessEvents();
+	LastScan = 0;
+	return(result);
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_WaitForASCII() - Waits for an ASCII char, then clears LastASCII and
+//		returns the ASCII value
+//
+///////////////////////////////////////////////////////////////////////////
+char
+IN_WaitForASCII(void)
+{
+	char		result;
+
+	while ((result = LastASCII)==0)
+		IN_WaitAndProcessEvents();
+	LastASCII = '\0';
+	return(result);
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_Ack() - waits for a button or key press.  If a button is down, upon
+// calling, it must be released for it to be recognized
+//
+///////////////////////////////////////////////////////////////////////////
+
+boolean	btnstate[NUMBUTTONS];
+
+void IN_StartAck(void)
+{
+    IN_ProcessEvents();
+//
+// get initial state of everything
+//
+	IN_ClearKeysDown();
+	memset(btnstate, 0, sizeof(btnstate));
+
+	int buttons = IN_JoyButtons() << 4;
+
+	if(MousePresent)
+		buttons |= IN_MouseButtons();
+
+	for(int i = 0; i < NUMBUTTONS; i++, buttons >>= 1)
+		if(buttons & 1)
+			btnstate[i] = true;
+}
+
+
+boolean IN_CheckAck (void)
+{
+    IN_ProcessEvents();
+//
+// see if something has been pressed
+//
+	if(LastScan)
+		return true;
+
+	int buttons = IN_JoyButtons() << 4;
+
+	if(MousePresent)
+		buttons |= IN_MouseButtons();
+
+	for(int i = 0; i < NUMBUTTONS; i++, buttons >>= 1)
+	{
+		if(buttons & 1)
+		{
+			if(!btnstate[i])
+            {
+                // Wait until button has been released
+                do
+                {
+                    IN_WaitAndProcessEvents();
+                    buttons = IN_JoyButtons() << 4;
+
+                    if(MousePresent)
+                        buttons |= IN_MouseButtons();
+                }
+                while(buttons & (1 << i));
+
+				return true;
+            }
+		}
+		else
+			btnstate[i] = false;
+	}
+
+	return false;
+}
+
+
+void IN_Ack (void)
+{
+	IN_StartAck ();
+
+    do
+    {
+        IN_WaitAndProcessEvents();
+    }
+	while(!IN_CheckAck ());
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	IN_UserInput() - Waits for the specified delay time (in ticks) or the
+//		user pressing a key or a mouse button. If the clear flag is set, it
+//		then either clears the key or waits for the user to let the mouse
+//		button up.
+//
+///////////////////////////////////////////////////////////////////////////
+boolean IN_UserInput(longword delay)
+{
+	longword	lasttime;
+
+	lasttime = GetTimeCount();
+	IN_StartAck ();
+	do
+	{
+        IN_ProcessEvents();
+		if (IN_CheckAck())
+			return true;
+        SDL_Delay(5);
+	} while (GetTimeCount() - lasttime < delay);
+	return(false);
+}
+
+//===========================================================================
+
+/*
+===================
+=
+= IN_MouseButtons
+=
+===================
+*/
+int IN_MouseButtons (void)
+{
+	if (MousePresent)
+		return INL_GetMouseButtons();
+	else
+		return 0;
+}
+
+bool IN_IsInputGrabbed()
+{
+    return GrabInput;
+}
+
+void IN_CenterMouse()
+{
+}
