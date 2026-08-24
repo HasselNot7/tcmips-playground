@@ -8,7 +8,6 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 
 ## 演示
 ![康威的生命游戏](asset/conway.gif)
-![中国象棋](asset/xiangqi.png)
 ![Wolfenstein 3D](asset/wolf3d.gif)
 
 ## 项目列表
