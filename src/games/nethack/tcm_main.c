@@ -27,9 +27,6 @@ main(int argc UNUSED, char **argv UNUSED)
 
     early_init(1, tcm_argv);
 
-    raw_printf("DBG2 ms=%p sdv=%p wd=%p bl536ok", makesingular,
-               special_dmgval, weapon_descr);
-
     gh.hname = tcm_argv[0];
     svh.hackpid = getpid();
 
