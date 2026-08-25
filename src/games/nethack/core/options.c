@@ -8174,6 +8174,9 @@ fruitadd(char *str, struct fruit *replace_fruit)
     int highest_fruit_id = 0, globpfx;
     char buf[PL_FSIZ], altname[PL_FSIZ];
     boolean user_specified = (str == svp.pl_fruit);
+
+    raw_printf("DBG fa u=%d len=%zu '%.16s'", user_specified,
+               str ? strlen(str) : (size_t) -1, str ? str : "(null)");
     /* if not user-specified, then it's a fruit name for a fruit on
      * a bones level or from orctown raider's loot...
      */

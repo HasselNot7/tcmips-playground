@@ -3044,6 +3044,11 @@ makesingular(const char *oldstr)
         while (*oldstr == ' ')
             oldstr++;
     if (!oldstr || !*oldstr) {
+        raw_printf("DBG ms ra0=%p ra1=%p ra2=%p s=%p",
+                   __builtin_return_address(0),
+                   __builtin_return_address(1),
+                   __builtin_return_address(2),
+                   (void *) oldstr);
         impossible("singular of null?");
         str[0] = '\0';
         return str;
