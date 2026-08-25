@@ -56,7 +56,17 @@ main(int argc UNUSED, char **argv UNUSED)
     vision_init();
     init_sound_disp_gamewindows();
 
-    raw_printf("DBG3 uwep=%p uarm=%p monst=%p", uwep, uarm,
+        {
+        extern const struct tcm_fp_s { int (*f)(void); } tcm_fp_test;
+        extern int tcm_fp_target(void);
+        extern const void *const tcm_rodata_ptrs[2];
+        raw_printf(
+            "FPTEST data=%p(%d) rodata=%p(%d) target=%p",
+            (void *) tcm_fp_test.f, tcm_fp_test.f == tcm_fp_target,
+            tcm_rodata_ptrs[0], tcm_rodata_ptrs[0] == tcm_fp_target,
+            (void *) tcm_fp_target);
+    }
+    raw_printf("TCMBUILD14 DBG3 uwep=%p uarm=%p monst=%p", uwep, uarm,
                (void *) gy.youmonst.data);
 
     if (*svp.plname)

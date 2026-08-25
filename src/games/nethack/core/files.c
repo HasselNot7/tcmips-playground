@@ -10,6 +10,10 @@
 #endif
 
 #include "hack.h"
+
+const char tcm_probe_a[] = "PROBE_ALPHA_0123456789";
+
+int tcm_fp_target(void) { return 42; }
 #include "dlb.h"
 
 #ifdef SFCTOOL

@@ -101,6 +101,8 @@ setuwep(struct obj *obj)
 {
     struct obj *olduwep = uwep;
 
+    raw_printf("DBG setuwep obj=%p otyp=%d", (void *) obj,
+               obj ? obj->otyp : -1);
     if (obj == uwep)
         return; /* necessary to not set gu.unweapon */
     setworn(obj, W_WEP);

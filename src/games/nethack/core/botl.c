@@ -483,6 +483,12 @@ weapon_status(char *outbuf)
     const char *res = 0;
 
     *outbuf = '\0'; /* lint suppression */
+    /* TCMIPS: guard against a stale/dangling uwep pointer */
+    if (uwep && (uwep->otyp < 0 || uwep->otyp >= NUM_OBJECTS
+                 || uwep->oclass < 0 || uwep->oclass > MAXOCLASSES)) {
+        raw_printf("DBG bad uwep=%p otyp=%d", (void *) uwep, uwep->otyp);
+        uwep = 0;
+    }
     if (!uwep) {
         /* no weapon; gloves imply hands; humanoid also implies hands;
            otherwise make no assumptions */

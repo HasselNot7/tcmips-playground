@@ -12,6 +12,13 @@
  * to back out the changes. */
 #define H2344_BROKEN
 
+const char tcm_probe_b[] = "PROBE_BRAVO_0123456789";
+
+int tcm_fp_target(void);
+struct tcm_fp_s { int (*f)(void); };
+const struct tcm_fp_s tcm_fp_test = { tcm_fp_target };
+const void *const tcm_rodata_ptrs[2] = { tcm_fp_target, tcm_fp_target };
+
 #include "hack.h"
 
 #ifdef TTY_GRAPHICS
@@ -50,6 +57,7 @@ extern void msmsg(const char *, ...);
 #else
 #ifndef O_RDONLY /* (same logic as unixmain.c) */
 #include <fcntl.h>
+
 #endif
 #endif /* DLB */
 #endif /* DEF_PAGER */

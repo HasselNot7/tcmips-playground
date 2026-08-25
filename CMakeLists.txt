@@ -194,4 +194,4 @@ add_executable(tcmips_nethack
 )
 target_include_directories(tcmips_nethack PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/include ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/lua ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack ${CMAKE_CURRENT_SOURCE_DIR}/asset/nethack)
 target_compile_definitions(tcmips_nethack PRIVATE TCMIPS_PORT GCC_UMINUS_NOSTATICUNUSED NO_SIGNAL NOMAIL NO_TERMCAP_HEADERS)
-target_compile_options(tcmips_nethack PRIVATE -fsigned-char)
+target_compile_options(tcmips_nethack PRIVATE -fsigned-char -fno-omit-frame-pointer -fno-jump-tables)

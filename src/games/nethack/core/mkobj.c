@@ -2744,6 +2744,9 @@ container_weight(struct obj *object)
 void
 dealloc_obj(struct obj *obj)
 {
+    if (obj == uwep || obj == uswapwep || obj == uarm || obj == uarmc
+        || obj == uquiver)
+        raw_printf("DBG FREE-INUSE %p otyp=%d", (void *) obj, obj->otyp);
     if (obj->otyp == BOULDER)
         obj->next_boulder = 0;
     if (obj->where == OBJ_DELETED) {
