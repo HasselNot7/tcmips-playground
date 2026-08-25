@@ -25,6 +25,10 @@ main(int argc UNUSED, char **argv UNUSED)
 #endif
     tcm_vterm_init();
 
+#ifndef TCM_HOST
+    tcm_embed_init(); /* blobs must live in RAM on the device */
+#endif
+
     early_init(1, tcm_argv);
 
     gh.hname = tcm_argv[0];

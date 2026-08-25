@@ -94,7 +94,8 @@ weapon_descr(struct obj *obj)
 
     raw_printf("DBG wd otyp=%d ocl=%d sk=%d sii=%d d='%s'",
                obj ? obj->otyp : -1, obj ? obj->oclass : -1, skill,
-               skill_names_indices[skill >= 0 && skill < P_NUM_SKILLS ? skill : 0],
+               skill_names_indices[skill >= 0 && skill < P_NUM_SKILLS ? skill : 0]);
+    raw_printf("DBG wd2 ra=%p d='%s'", __builtin_return_address(0),
                descr ? descr : "(null)");
 
     /* assorted special cases */

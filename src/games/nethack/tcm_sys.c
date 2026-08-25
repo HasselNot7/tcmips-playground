@@ -53,6 +53,35 @@ static rfd rfds[RM_MAXFD];
 static const unsigned char *emb_ptr;
 static unsigned int emb_len, emb_off;
 
+/*
+ * The device cannot reliably read very large const arrays placed in
+ * flash/rodata (wolf3d lesson: >~500KB reads back zeroed), so copy the
+ * whole file table and every blob into heap RAM once at startup.
+ */
+static tcm_nh_file_t efiles[192];
+static int efile_count;
+
+void
+tcm_embed_init(void)
+{
+    int i;
+    int n = tcm_nh_file_count;
+
+    if (n > (int) (sizeof(efiles) / sizeof(efiles[0])))
+        n = (int) (sizeof(efiles) / sizeof(efiles[0]));
+    for (i = 0; i < n; i++) {
+        unsigned int sz = tcm_nh_files[i].size;
+        unsigned char *ram = (unsigned char *) malloc(sz ? sz : 1);
+        if (!ram)
+            continue;
+        memcpy(ram, tcm_nh_files[i].data, sz);
+        efiles[i].name = tcm_nh_files[i].name;
+        efiles[i].data = ram;
+        efiles[i].size = sz;
+    }
+    efile_count = n;
+}
+
 static const char *
 baseof(const char *path)
 {
@@ -115,10 +144,10 @@ open(const char *path, int flags, ...)
     if (!(flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC))) {
         /* read access: serve embedded data if known */
         const char *b = baseof(path);
-        for (int j = 0; j < tcm_nh_file_count; j++) {
-            if (!strcmp(tcm_nh_files[j].name, b)) {
-                emb_ptr = tcm_nh_files[j].data;
-                emb_len = tcm_nh_files[j].size;
+        for (int j = 0; j < efile_count; j++) {
+            if (!strcmp(efiles[j].name, b)) {
+                emb_ptr = efiles[j].data;
+                emb_len = efiles[j].size;
                 emb_off = 0;
                 return EMBED_FD;
             }
@@ -326,10 +355,10 @@ int
 stat(const char *path, struct stat *st)
 {
     const char *b = baseof(path);
-    for (int j = 0; j < tcm_nh_file_count; j++) {
-        if (!strcmp(tcm_nh_files[j].name, b)) {
+    for (int j = 0; j < efile_count; j++) {
+        if (!strcmp(efiles[j].name, b)) {
             memset(st, 0, sizeof(*st));
-            st->st_size = (off_t) tcm_nh_files[j].size;
+            st->st_size = (off_t) efiles[j].size;
             st->st_mode = S_IFREG | 0444;
             return 0;
         }
@@ -376,8 +405,8 @@ access(const char *path, int amode)
     (void) amode;
     {
         const char *b = baseof(path);
-        for (int j = 0; j < tcm_nh_file_count; j++)
-            if (!strcmp(tcm_nh_files[j].name, b))
+        for (int j = 0; j < efile_count; j++)
+            if (!strcmp(efiles[j].name, b))
                 return 0;
     }
     return rm_find(path) ? 0 : -1;

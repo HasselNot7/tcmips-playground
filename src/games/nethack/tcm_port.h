@@ -8,6 +8,7 @@
 extern "C" {
 #endif
 
+void tcm_embed_init(void);
 int tcm_getch(void);
 long tcm_rand(void);
 void tcm_napms(int ms);
