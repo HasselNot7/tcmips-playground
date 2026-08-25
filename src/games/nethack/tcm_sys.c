@@ -445,8 +445,8 @@ static const struct {
 } tcm_env[] = {
     { "NETHACKOPTIONS",
       "name:Hero,role:Valkyrie,race:Dwarf,align:lawful,"
-      "menustyle:traditional,!sparkle,pickup_types:$?!/"
-      "disclose:+i,+a,+v,+g,+c,+o" },
+      "menustyle:traditional,!sparkle,pickup_types:$?!"
+      "disclose:i,a,v,g,c,o" },
     { "TERM", "tcmips" },
     { "HACKDIR", "/" },
 };

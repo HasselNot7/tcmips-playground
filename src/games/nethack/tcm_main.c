@@ -52,6 +52,9 @@ main(int argc UNUSED, char **argv UNUSED)
     vision_init();
     init_sound_disp_gamewindows();
 
+    raw_printf("DBG3 uwep=%p uarm=%p monst=%p", uwep, uarm,
+               (void *) gy.youmonst.data);
+
     if (*svp.plname)
         getlock();
 
