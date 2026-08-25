@@ -454,9 +454,20 @@ static const struct {
 char *
 getenv(const char *name)
 {
+    /* return a writable copy: option parsers mutate the buffer */
     for (unsigned i = 0; i < sizeof(tcm_env) / sizeof(tcm_env[0]); i++)
-        if (!strcmp(name, tcm_env[i].name))
-            return (char *) tcm_env[i].val;
+        if (!strcmp(name, tcm_env[i].name)) {
+            static char copied[4][512];
+            static unsigned slot;
+            char *dst = copied[slot & 3];
+            unsigned len = (unsigned) strlen(tcm_env[i].val);
+            if (len >= sizeof copied[0])
+                len = sizeof copied[0] - 1;
+            ++slot;
+            memcpy(dst, tcm_env[i].val, len);
+            dst[len] = '\0';
+            return dst;
+        }
     return 0;
 }
 

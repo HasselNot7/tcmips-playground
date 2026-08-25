@@ -188,8 +188,10 @@ add_executable(tcmips_nethack
   src/games/nethack/tcm_sys.c
   src/games/nethack/tcm_kbd.c
   src/games/nethack/tcm_dirent.c
+  src/games/nethack/nhfont.c
   src/games/nethack/sys/posixregex.c
   asset/nethack/nhdata.cpp
 )
 target_include_directories(tcmips_nethack PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/include ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/lua ${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack ${CMAKE_CURRENT_SOURCE_DIR}/asset/nethack)
 target_compile_definitions(tcmips_nethack PRIVATE TCMIPS_PORT GCC_UMINUS_NOSTATICUNUSED NO_SIGNAL NOMAIL NO_TERMCAP_HEADERS)
+target_compile_options(tcmips_nethack PRIVATE -fsigned-char)

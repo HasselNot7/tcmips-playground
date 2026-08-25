@@ -1,7 +1,9 @@
 /* Virtual text terminal for NetHack on TCMIPS.
- * Maintains a target screen buffer; flushes diffs to the streaming
- * ASCII console using CONSOLE_CMD_SET_DATA_OFFSET for positioning. */
+ * Target screen buffer + dirty tracking.
+ * Host: ANSI diffs on stdout. Device: glyphs rendered straight into the
+ * ASCII console's RGB332 VRAM (arbitrary positioning, per-cell colors). */
 #include "tcm_port.h"
+#include "nhfont.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +12,7 @@
 #define VFLUSH_HOST 1
 #else
 #include <dev/console.h>
-#include <dev/syscall.h>
+#include <tcm_config.h>
 #endif
 
 #define VCO_MAX 80
@@ -19,7 +21,6 @@
 int tcm_vterm_CO = VCO_MAX;
 int tcm_vterm_LI = VLI_MAX;
 
-/* attribute byte: low nibble fg palette index, high nibble bg */
 static int cur_fg = 7, cur_bg = 0, cur_bold = 0, cur_rev = 0;
 
 typedef struct {
@@ -31,7 +32,7 @@ typedef struct {
 
 static vcell target[VLI_MAX][VCO_MAX];
 static vcell commit[VLI_MAX][VCO_MAX];
-static int lx, ly; /* logical cursor */
+static int lx, ly;
 static int dirty[VLI_MAX];
 
 static const unsigned char pal[16][3] = {
@@ -130,7 +131,6 @@ tcm_vterm_setattr(int fg, int bg, int bold, int rev)
     cur_rev = rev ? 1 : 0;
 }
 
-/* erase from cursor to end of line */
 void
 tcm_vterm_cl_end(void)
 {
@@ -144,14 +144,13 @@ tcm_vterm_cl_end(void)
     }
 }
 
-/* clear from cursor to end of screen */
 void
 tcm_vterm_cl_eos(void)
 {
+    vcell b;
+    set_blank(&b);
     tcm_vterm_cl_end();
     for (int r = ly + 1; r < tcm_vterm_LI; r++) {
-        vcell b;
-        set_blank(&b);
         for (int x = 0; x < tcm_vterm_CO; x++) {
             if (target[r][x].ch != b.ch || target[r][x].attr != b.attr) {
                 target[r][x] = b;
@@ -164,105 +163,80 @@ tcm_vterm_cl_eos(void)
 void
 tcm_vterm_clear(void)
 {
-    for (int r = 0; r < tcm_vterm_LI; r++) {
-        memset(&target[r][0], 0, sizeof(vcell) * tcm_vterm_CO);
-        dirty[r] = 1;
-    }
     for (int r = 0; r < VLI_MAX; r++)
         for (int c = 0; c < VCO_MAX; c++)
             set_blank(&target[r][c]);
+    memset(dirty, 0, sizeof(dirty));
+    for (int r = 0; r < tcm_vterm_LI; r++)
+        dirty[r] = 1;
     lx = ly = 0;
-#ifdef VFLUSH_HOST
-    fputs("\033[2J\033[H", stdout);
-    fflush(stdout);
-#else
-    tcm_ascii_console_clear();
+#ifndef VFLUSH_HOST
+    /* wipe one full console page: 30 rows x 640 px x 16 px lines */
+    memset((void *) TCM_VRAM_ASCII_ADDR, 0,
+           30u * 16u * 640u);
 #endif
     memset(commit, 0, sizeof(commit));
 }
 
 #ifdef VFLUSH_HOST
-static void
-hw_pos(int row, int col)
-{
-    printf("\033[%d;%dH", row + 1, col + 1);
-}
-static void
-hw_color(unsigned char attr)
-{
-    static unsigned char last = 0xff;
-    if (attr == last)
-        return;
-    last = attr;
-    static const int ansi[16] = { 30, 31, 32, 33, 34, 35, 36, 37,
-                                  90, 91, 92, 93, 94, 95, 96, 97 };
-    printf("\033[%d;%dm", ansi[attr & 0x0f], ansi[(attr >> 4) & 0x0f] + 10);
-}
-#else
-void
-tcm_console_set_data_offset(unsigned int off)
-{
-    /* ascii console cmd 1 = CONSOLE_CMD_SET_DATA_OFFSET */
-    tcm_syscall_ascii_console(1, off);
-}
-static void
-hw_pos(int row, int col, int stride)
-{
-    tcm_console_set_data_offset((unsigned int) (row * stride + col));
-}
-static void
-hw_color(unsigned char attr)
-{
-    static unsigned char last = 0xff;
-    if (attr == last)
-        return;
-    last = attr;
-    tcm_ascii_console_set_color(pal[attr & 0x0f][0], pal[attr & 0x0f][1],
-                                pal[attr & 0x0f][2], pal[(attr >> 4) & 0x0f][0],
-                                pal[(attr >> 4) & 0x0f][1],
-                                pal[(attr >> 4) & 0x0f][2]);
-}
-#endif
 
-/* stride between console rows in cells; probed/adjusted on device */
-int tcm_vterm_stride = VCO_MAX;
+static const int ansi[16] = { 30, 31, 32, 33, 34, 35, 36, 37,
+                              90, 91, 92, 93, 94, 95, 96, 97 };
+
+static inline void
+emit_cell(int r, int c, const vcell *cl)
+{
+    printf("\033[%d;%dH\033[%d;%dm%c", r + 1, c + 1, ansi[cl->attr & 0x0f],
+           ansi[(cl->attr >> 4) & 0x0f] + 10, cl->ch);
+}
+
+#else /* device: direct VRAM glyph rendering */
+
+/* console driver facts (tcmips/dev/console.c, TCM_CONSOLE_CUSTOM_FONT_8X16):
+ * 640px-wide RGB332 framebuffer at TCM_VRAM_ASCII_ADDR; text cells are
+ * 8x16 pixels; page = 30 rows x 80 cols. We bypass the driver's stream
+ * cursor entirely and paint glyphs at absolute pixel offsets. */
+#define NH_FB_W 640
+
+static inline unsigned char
+rgb332(const unsigned char *p)
+{
+    return (unsigned char) (((p[0] >> 5) << 5) | ((p[1] >> 5) << 2)
+                            | (p[2] >> 6));
+}
+
+static void
+render_cell(int row, int col, const vcell *cl)
+{
+    const unsigned char *g = &nhfont8x16[(unsigned) cl->ch * 16];
+    uint8_t *cell = (uint8_t *) (TCM_VRAM_ASCII_ADDR)
+                    + (unsigned) row * 16 * NH_FB_W + (unsigned) col * 8;
+    unsigned char fg = rgb332(pal[cl->attr & 0x0f]);
+    unsigned char bg = rgb332(pal[(cl->attr >> 4) & 0x0f]);
+
+    for (int r = 0; r < 16; r++) {
+        uint8_t *line = cell + r * NH_FB_W;
+        unsigned char bits = g[r];
+        for (int b = 0; b < 8; b++)
+            line[b] = (bits & (0x80 >> b)) ? fg : bg;
+    }
+}
+
+#endif /* VFLUSH_HOST */
 
 void
 tcm_vterm_flush(void)
 {
-    char line[VCO_MAX + 1];
-#ifndef VFLUSH_HOST
-    int stride = tcm_vterm_stride;
-#endif
     for (int r = 0; r < tcm_vterm_LI; r++) {
         if (!dirty[r])
             continue;
-        int c = 0;
-        while (c < tcm_vterm_CO) {
-            if (!memcmp(&target[r][c], &commit[r][c], sizeof(vcell))) {
-                c++;
+        for (int c = 0; c < tcm_vterm_CO; c++) {
+            if (!memcmp(&target[r][c], &commit[r][c], sizeof(vcell)))
                 continue;
-            }
-            int start = c;
-            unsigned char at = target[r][c].attr;
-            while (c < tcm_vterm_CO && memcmp(&target[r][c], &commit[r][c],
-                                              sizeof(vcell))
-                   && target[r][c].attr == at)
-                c++;
-            int n = c - start;
 #ifdef VFLUSH_HOST
-            hw_pos(r, start);
+            emit_cell(r, c, &target[r][c]);
 #else
-            hw_pos(r, start, stride);
-#endif
-            hw_color(at);
-            for (int i = 0; i < n; i++)
-                line[i] = (char) target[r][start + i].ch;
-            line[n] = 0;
-#ifdef VFLUSH_HOST
-            fwrite(line, 1, (size_t) n, stdout);
-#else
-            tcm_ascii_console_write_string(line);
+            render_cell(r, c, &target[r][c]);
 #endif
         }
         memcpy(&commit[r][0], &target[r][0], sizeof(vcell) * tcm_vterm_CO);

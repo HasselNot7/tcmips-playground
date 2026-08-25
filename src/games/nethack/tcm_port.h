@@ -23,7 +23,6 @@ int tcm_vterm_cur_x(void);
 int tcm_vterm_cur_y(void);
 extern int tcm_vterm_CO;
 extern int tcm_vterm_LI;
-extern int tcm_vterm_stride;
 
 #ifdef __cplusplus
 }
