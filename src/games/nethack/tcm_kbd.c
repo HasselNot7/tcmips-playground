@@ -5,6 +5,34 @@
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
+
+void tcm_sim_screenshot(const char *path);
+static unsigned char
+sim_readbyte(void)
+{
+    unsigned char c = 0;
+    if (read(0, &c, 1) != 1)
+        return 0;
+    return c;
+}
+
+static void
+sim_handle_shot(void)
+{
+    char name[128];
+    int i = 0;
+    char full[160];
+    for (;;) {
+        unsigned char c = sim_readbyte();
+        if (!c || c == 0x02 || i >= 120)
+            break;
+        name[i++] = (char) c;
+    }
+    name[i] = 0;
+    snprintf(full, sizeof full, "/tmp/opencode/shots/%s", name);
+    tcm_sim_screenshot(full);
+    fprintf(stderr, "[shot %s]\n", full);
+}
 #else
 #include <dev/keyboard.h>
 #include <dev/syscall.h>
@@ -23,6 +51,10 @@ tcm_getch(void)
     }
     if (read(0, &c, 1) != 1)
         return '\033';
+    if (c == 0x01) {
+        sim_handle_shot();
+        return tcm_getch(); /* recurse for the next real key */
+    }
     if (c == 27) {
         /* escape sequence? */
         unsigned char b;
@@ -67,6 +99,8 @@ tcm_getch(void)
         c = '\n';
     if (c == 127)
         c = 8;
+    if (getenv("NHKBDLOG"))
+        fprintf(stderr, "[kbd %02x '%c']\n", c, c >= 32 && c < 127 ? c : '.');
     return c;
 #else
     for (;;) {

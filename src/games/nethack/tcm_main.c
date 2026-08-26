@@ -9,6 +9,8 @@
 #include <dev/console.h>
 #endif
 
+__attribute__((used)) const char tcm_build_id[] = "tcm-nethack-v1.0";
+
 static char tcm_argv0[] = "nethack";
 static char *tcm_argv[] = { tcm_argv0, 0 };
 
@@ -18,11 +20,7 @@ main(int argc UNUSED, char **argv UNUSED)
     NHFILE *nhfp;
     boolean resuming = FALSE;
 
-#ifdef TCM_HOST
-    /* host debugging: plain terminal */
-#else
-    tcm_ascii_console_init();
-#endif
+    tcm_ascii_console_init(); /* device driver / host simulation */
     tcm_vterm_init();
 
 #ifndef TCM_HOST
@@ -30,6 +28,7 @@ main(int argc UNUSED, char **argv UNUSED)
 #endif
 
     early_init(1, tcm_argv);
+    (void) tcm_build_id;
 
     gh.hname = tcm_argv[0];
     svh.hackpid = getpid();
@@ -53,24 +52,14 @@ main(int argc UNUSED, char **argv UNUSED)
     plnamesuffix();   /* strip role,race,&c suffix */
 
     dlb_init();
+    dlb_init();
     vision_init();
     init_sound_disp_gamewindows();
 
-        {
-        extern const struct tcm_fp_s { int (*f)(void); } tcm_fp_test;
-        extern int tcm_fp_target(void);
-        extern const void *const tcm_rodata_ptrs[2];
-        raw_printf(
-            "FPTEST data=%p(%d) rodata=%p(%d) target=%p",
-            (void *) tcm_fp_test.f, tcm_fp_test.f == tcm_fp_target,
-            tcm_rodata_ptrs[0], tcm_rodata_ptrs[0] == tcm_fp_target,
-            (void *) tcm_fp_target);
-    }
-    raw_printf("TCMBUILD14 DBG3 uwep=%p uarm=%p monst=%p", uwep, uarm,
-               (void *) gy.youmonst.data);
-
-    if (*svp.plname)
+            
+    if (*svp.plname) {
         getlock();
+        }
 
     if (*svp.plname && (nhfp = restore_saved_game()) != 0) {
         pline("Restoring save file...");

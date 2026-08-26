@@ -185,10 +185,11 @@ add_executable(tcmips_nethack
   src/games/nethack/tcm_main.c
   src/games/nethack/tcm_vterm.c
   src/games/nethack/tcm_termcap.c
-  src/games/nethack/tcm_sys.c
+  src/games/nethack/tcm_fs.c
   src/games/nethack/tcm_kbd.c
   src/games/nethack/tcm_dirent.c
   src/games/nethack/nhfont.c
+  src/games/nethack/tcm_hooks.c
   src/games/nethack/sys/posixregex.c
   asset/nethack/nhdata.cpp
 )

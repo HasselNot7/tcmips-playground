@@ -8,11 +8,17 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <stdint.h>
+#include <stdlib.h>
+
 #ifdef TCM_HOST
-#define VFLUSH_HOST 1
+#define TCM_VRAM_ASCII_ADDR 0x03C00000u
+void *tcm_sim_fb(void);
+static unsigned char *tcms_vram;
 #else
 #include <dev/console.h>
 #include <tcm_config.h>
+#define tcms_vram ((unsigned char *) TCM_VRAM_ASCII_ADDR)
 #endif
 
 #define VCO_MAX 80
@@ -198,32 +204,32 @@ tcm_vterm_clear(void)
         dirty[r] = 1;
     lx = ly = 0;
 #ifndef VFLUSH_HOST
-    /* wipe one full console page: 30 rows x 640 px x 16 px lines */
-    memset((void *) TCM_VRAM_ASCII_ADDR, 0,
-           30u * 16u * 640u);
+    {
+        static int resynced;
+        if (!resynced) {
+            resynced = 1;
+            tcm_ascii_console_reset();
+        }
+        else {
+            memset((void *) TCM_VRAM_ASCII_ADDR, 0,
+                   30u * 16u * 640u);
+        }
+    }
 #endif
     memset(commit, 0, sizeof(commit));
 }
 
-#ifdef VFLUSH_HOST
-
-static const int ansi[16] = { 30, 31, 32, 33, 34, 35, 36, 37,
-                              90, 91, 92, 93, 94, 95, 96, 97 };
-
-static inline void
-emit_cell(int r, int c, const vcell *cl)
-{
-    printf("\033[%d;%dH\033[%d;%dm%c", r + 1, c + 1, ansi[cl->attr & 0x0f],
-           ansi[(cl->attr >> 4) & 0x0f] + 10, cl->ch);
-}
-
-#else /* device: direct VRAM glyph rendering */
-
-/* console driver facts (tcmips/dev/console.c, TCM_CONSOLE_CUSTOM_FONT_8X16):
- * 640px-wide RGB332 framebuffer at TCM_VRAM_ASCII_ADDR; text cells are
- * 8x16 pixels; page = 30 rows x 80 cols. We bypass the driver's stream
- * cursor entirely and paint glyphs at absolute pixel offsets. */
+/* Glyph rendering into the ASCII console framebuffer.
+ * Device facts (tcmips/dev/console.c, TCM_CONSOLE_CUSTOM_FONT_8X16):
+ * 640px-wide RGB332 framebuffer; text cells are 8x16 pixels; page =
+ * 30 rows x 80 cols. We bypass the driver's stream cursor entirely. */
 #define NH_FB_W 640
+
+#ifdef TCM_HOST
+#define NH_VRAM tcms_vram
+#else
+#define NH_VRAM tcms_vram
+#endif
 
 static inline unsigned char
 rgb332(const unsigned char *p)
@@ -236,8 +242,8 @@ static void
 render_cell(int row, int col, const vcell *cl)
 {
     const unsigned char *g = &nhfont8x16[(unsigned) cl->ch * 16];
-    uint8_t *cell = (uint8_t *) (TCM_VRAM_ASCII_ADDR)
-                    + (unsigned) row * 16 * NH_FB_W + (unsigned) col * 8;
+    uint8_t *cell = NH_VRAM + (unsigned) row * 16 * NH_FB_W
+                    + (unsigned) col * 8;
     unsigned char fg = rgb332(pal[cl->attr & 0x0f]);
     unsigned char bg = rgb332(pal[(cl->attr >> 4) & 0x0f]);
 
@@ -249,39 +255,20 @@ render_cell(int row, int col, const vcell *cl)
     }
 }
 
-#endif /* VFLUSH_HOST */
-
-#ifndef VFLUSH_HOST
-/* keep hardware scanout pinned to page 0: the driver advances its
- * DATA_OFFSET whenever streamed text scrolls, which would otherwise
- * leave us painting to an invisible buffer */
-#include <dev/syscall.h>
-#endif
-
 void
 tcm_vterm_flush(void)
 {
-#ifndef VFLUSH_HOST
-    tcm_syscall_ascii_console(1, (unsigned int) TCM_VRAM_ASCII_ADDR);
-#endif
     for (int r = 0; r < tcm_vterm_LI; r++) {
         if (!dirty[r])
             continue;
         for (int c = 0; c < tcm_vterm_CO; c++) {
             if (!memcmp(&target[r][c], &commit[r][c], sizeof(vcell)))
                 continue;
-#ifdef VFLUSH_HOST
-            emit_cell(r, c, &target[r][c]);
-#else
             render_cell(r, c, &target[r][c]);
-#endif
         }
         memcpy(&commit[r][0], &target[r][0], sizeof(vcell) * tcm_vterm_CO);
         dirty[r] = 0;
     }
-#ifdef VFLUSH_HOST
-    fflush(stdout);
-#endif
 }
 
 void
@@ -296,6 +283,9 @@ tcm_vterm_init(void)
             set_blank(&commit[r][c]);
         }
     lx = ly = 0;
+#ifdef TCM_HOST
+    tcms_vram = tcm_sim_fb();
+#endif
 }
 
 int
@@ -308,4 +298,27 @@ int
 tcm_vterm_cur_y(void)
 {
     return ly;
+}
+
+int
+tcm_dbg_stats(void)
+{
+    int n = 0, r, c;
+    for (r = 0; r < VLI_MAX; r++)
+        for (c = 0; c < VCO_MAX; c++)
+            if (target[r][c].ch != ' ')
+                n++;
+    return n;
+}
+
+void
+tcm_dbg_text(char *out)
+{
+    int r, c, n = 0;
+    for (r = 0; r < tcm_vterm_LI; r++) {
+        for (c = 0; c < tcm_vterm_CO; c++)
+            out[n++] = target[r][c].ch;
+        out[n++] = '\n';
+    }
+    out[n] = 0;
 }

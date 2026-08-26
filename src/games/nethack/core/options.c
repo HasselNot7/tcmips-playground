@@ -8175,10 +8175,6 @@ fruitadd(char *str, struct fruit *replace_fruit)
     char buf[PL_FSIZ], altname[PL_FSIZ];
     boolean user_specified = (str == svp.pl_fruit);
 
-    raw_printf(
-        "DBG fa u=%d '%.16s' ms=%p sdv=%p wd=%p ws=%p su=%p", user_specified,
-        str ? str : "(null)", makesingular, special_dmgval, weapon_descr,
-        weapon_status, setuwep);
     /* if not user-specified, then it's a fruit name for a fruit on
      * a bones level or from orctown raider's loot...
      */

@@ -95,17 +95,9 @@ weapon_descr(struct obj *obj)
     /* TCMIPS: refuse to describe a dangling/garbage object */
     if (!obj || obj->otyp < 0 || obj->otyp >= NUM_OBJECTS || !obj->oclass
         || obj->oclass > MAXOCLASSES) {
-        static int warned;
-        if (!warned++) {
-            raw_printf("DBG wd-junk obj=%p silenced", (void *) obj);
-        }
-        return "weapon"; /* safe generic description */
+        return "weapon"; /* stale/dangling pointer guard */
     }
 
-    raw_printf("DBG wd otyp=%d ocl=%d sk=%d sii=%d d='%s'",
-               obj ? obj->otyp : -1, obj ? obj->oclass : -1, skill,
-               skill_names_indices[skill >= 0 && skill < P_NUM_SKILLS ? skill : 0],
-               descr ? descr : "(null)");
 
     /* assorted special cases */
     switch (skill) {

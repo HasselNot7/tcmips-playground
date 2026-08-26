@@ -197,6 +197,12 @@ extern void term_shutdown(void);
 
 extern int xputc(int);
 extern void xputs(const char *);
+#ifdef TCMIPS_PORT
+/* UNIX wintty writes characters with putchar()/puts() to stdout; on the
+ * TCMIPS console everything must go through the vterm renderer. */
+#define putchar(x) xputc(x)
+#define puts(s) xputs(s)
+#endif
 #if 0
 extern void revbeg(void);
 extern void boldbeg(void);

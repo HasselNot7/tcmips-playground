@@ -9,8 +9,6 @@
 
 #include "lprefix.h"
 
-const char tcm_probe_c[] = "PROBE_CHARLIE_0123456789";
-
 
 #include <float.h>
 #include <limits.h>

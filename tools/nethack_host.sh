@@ -8,7 +8,7 @@ mkdir -p $OUT
 SRCS=""
 for f in $SRC/core/*.c $SRC/tty/*.c $SRC/sys/*.c $SRC/lua/*.c \
          $SRC/tcm_main.c $SRC/tcm_vterm.c $SRC/tcm_termcap.c \
-         $SRC/tcm_sys.c $SRC/tcm_kbd.c $SRC/tcm_dirent.c $SRC/nhfont.c; do
+         $SRC/tcm_kbd.c $SRC/tcm_dirent.c $SRC/nhfont.c $SRC/tcm_hooks.c $SRC/tcm_console_sim.c; do
     case "$f" in
         */lua/lua.c|*/lua/luac.c|*/lua/onelua.c) continue ;;
     esac

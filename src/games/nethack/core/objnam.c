@@ -3044,7 +3044,6 @@ makesingular(const char *oldstr)
         while (*oldstr == ' ')
             oldstr++;
     if (!oldstr || !*oldstr) {
-        raw_printf("DBG ms s=%p", (void *) oldstr);
         impossible("singular of null?");
         str[0] = '\0';
         return str;

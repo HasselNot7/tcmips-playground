@@ -12,12 +12,6 @@
  * to back out the changes. */
 #define H2344_BROKEN
 
-const char tcm_probe_b[] = "PROBE_BRAVO_0123456789";
-
-int tcm_fp_target(void);
-struct tcm_fp_s { int (*f)(void); };
-const struct tcm_fp_s tcm_fp_test = { tcm_fp_target };
-const void *const tcm_rodata_ptrs[2] = { tcm_fp_target, tcm_fp_target };
 
 #include "hack.h"
 
@@ -2659,7 +2653,7 @@ tty_end_menu(
     const char *prompt) /* prompt to for menu */
 {
     struct WinDesc *cw = 0;
-    tty_menu_item *curr;
+        tty_menu_item *curr;
     short len;
     int lmax, n;
     char menu_ch;
