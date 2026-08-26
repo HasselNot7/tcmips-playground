@@ -15,6 +15,7 @@ void tcm_napms(int ms);
 void tcm_vterm_init(void);
 void tcm_vterm_flush(void);
 void tcm_vterm_clear(void);
+void tcm_vterm_raw(const char *s);
 void tcm_vterm_putc(int c);
 void tcm_vterm_cmov(int x, int y);
 void tcm_vterm_setattr(int fg, int bg, int bold, int rev);

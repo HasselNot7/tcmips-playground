@@ -236,9 +236,16 @@ write(int fd, const void *buf, size_t n)
         fwrite(buf, 1, n, stdout);
         fflush(stdout);
 #else
-        const char *s = (const char *) buf;
-        for (size_t i = 0; i < n; i++)
-            tcm_ascii_console_write_char(s[i]);
+        /* render via vterm: never touch the driver's scrolling cursor */
+        {
+            const char *s = (const char *) buf;
+            size_t i;
+            for (i = 0; i < n; i++) {
+                char tmp[2] = { s[i], 0 };
+                tcm_vterm_raw(tmp);
+            }
+            tcm_vterm_flush();
+        }
 #endif
         return (ssize_t) n;
     }
@@ -663,9 +670,12 @@ error(const char *fmt, ...)
 #ifdef TCM_HOST
     fprintf(stderr, "%s\n", buf);
 #else
-    tcm_ascii_console_write_string("NetHack error: ");
-    tcm_ascii_console_write_string(buf);
-    tcm_ascii_console_write_char('\n');
+    {
+        char ebuf[BUFSZ + 32];
+        Snprintf(ebuf, sizeof ebuf, "NetHack error: %s\n", buf);
+        tcm_vterm_raw(ebuf);
+        tcm_vterm_flush();
+    }
 #endif
     exit(EXIT_FAILURE);
 }

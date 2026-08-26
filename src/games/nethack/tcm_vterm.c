@@ -160,6 +160,33 @@ tcm_vterm_cl_eos(void)
     }
 }
 
+#ifndef VFLUSH_HOST
+void
+tcm_vterm_raw(const char *s)
+{
+    /* low-level raw message channel: render straight into the vterm so
+     * streamed debug/panic output can never desync the scanout */
+    while (*s) {
+        unsigned char c = (unsigned char) *s++;
+        if (c == '\n') {
+            lx = 0;
+            ly = tcm_vterm_LI - 1;
+            continue;
+        }
+        if (c < ' ')
+            continue;
+        if (lx >= tcm_vterm_CO) {
+            lx = 0;
+            ly = tcm_vterm_LI - 1;
+        }
+        target[ly][lx].ch = c;
+        target[ly][lx].attr = BLANK_ATTR;
+        lx++;
+        dirty[ly] = 1;
+    }
+}
+#endif
+
 void
 tcm_vterm_clear(void)
 {
@@ -224,9 +251,19 @@ render_cell(int row, int col, const vcell *cl)
 
 #endif /* VFLUSH_HOST */
 
+#ifndef VFLUSH_HOST
+/* keep hardware scanout pinned to page 0: the driver advances its
+ * DATA_OFFSET whenever streamed text scrolls, which would otherwise
+ * leave us painting to an invisible buffer */
+#include <dev/syscall.h>
+#endif
+
 void
 tcm_vterm_flush(void)
 {
+#ifndef VFLUSH_HOST
+    tcm_syscall_ascii_console(1, (unsigned int) TCM_VRAM_ASCII_ADDR);
+#endif
     for (int r = 0; r < tcm_vterm_LI; r++) {
         if (!dirty[r])
             continue;
