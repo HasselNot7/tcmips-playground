@@ -12,8 +12,8 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 
 | | |
 |---|---|
-| <img src="asset/photos/conway.gif" width="400"> | <img src="asset/photos/Nethack.jpg" width="400"> |
-| <img src="asset/photos/wolf3d.gif" width="400"> | <img src="asset/photos/xiangqi.png" width="400"> |
+| <img src="asset/photos/wolf3d.gif" width="400"> | <img src="asset/photos/Nethack.jpg" width="400"> |
+| <img src="asset/photos/xiangqi.png" width="400"> | <img src="asset/photos/conway.gif" width="400"> |
 
 ## 项目列表
 
