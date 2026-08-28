@@ -14,12 +14,13 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 
 | 可执行文件 | 说明 | 操作 |
 |-----------|------|------|
-| `tcmips_snake` | 贪吃蛇:吃食物变长加速,分数/长度实时显示在七段数码管 | 方向键移动,Q 退出,R 重开 |
+| `tcmips_snake` | 贪吃蛇:吃食物变长加速 | 方向键移动,Q 退出,R 重开 |
 | `tcmips_reaction` | 反应速度测试:等待 "NOW!" 出现后按键,微秒级计时 | 任意键,Q 退出 |
 | `tcmips_clock` | 电子钟:天数 + 时:分:秒 | Q 退出 |
 | `tcmips_life` | 康威生命游戏:80x60 环形网格,活细胞按代龄着色,可游标编辑 | 方向键移动,Enter 画/擦,Space 运行/暂停,S 单步,R 随机,C 清空,Q 退出 |
 | `tcmips_xiangqi` | 中国象棋人机对战:完整规则 + α-β 剪枝搜索 AI,可选深度 | 方向键移动,Enter 选子/落子,退格取消,1-4 调 AI 深度,R 重开,Q 退出 |
-| `tcmips_wolf3d` | Wolfenstein 3D(共享版第 1 章):Wolf4SDL 引擎移植,光线投射渲染、敌人 AI、10 关 | 见下方按键说明 |
+| `tcmips_wolf3d` | Wolfenstein 3D:Wolf4SDL 引擎移植,光线投射渲染 | 见下方按键说明 |
+| `tcmips_nethack` | NetHack 5.0.0:Roguelike 关卡数据由内嵌 Lua 驱动(有BUG未修复) | 方向键移动,Enter 确认 |
 
 ## 目录结构
 
@@ -28,22 +29,29 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 ├── CMakeLists.txt                  # 构建配置(已内置工具链路径)
 ├── asset/
 │   ├── conway.gif / xiangqi.png    # 演示图
-│   └── wolf3d/wolfdata.{h,cpp}     # Wolf3D 共享版 WL1 数据生成的嵌入数组(脚本生成物)
+│   ├── wolf3d/wolfdata.{h,cpp}     # Wolf3D 共享版 WL1 数据生成的嵌入数组(脚本生成物)
+│   └── nethack/
+│       ├── dat/                    # NetHack 运行时数据(145 个文件,含全部 .lua 关卡)
+│       └── nhdata.{h,cpp}          # dat/ 生成的嵌入数组
 └── src/
     ├── common/
     │   └── tcm_util.h              # 延时 / 随机数工具(基于时间戳 syscall)
     ├── tools/
     │   └── clock.cpp               # 电子钟
-    ├── games/
-    │   ├── snake.cpp               # 贪吃蛇
-    │   ├── reaction.cpp            # 反应速度测试
-    │   ├── life.cpp                # 生命游戏
-    │   └── xiangqi.cpp             # 中国象棋 AI
-    └── wolf3d/                     # Wolfenstein 3D(Wolf4SDL 引擎移植)
-        ├── tcm_port.h              # SDL 兼容垫片:类型/键值/时钟
-        ├── tcm_files.{h,cpp}       # 只读"文件"层:直接访问嵌入的 WL1 数据
-        ├── id_*.cpp/h              # 引擎底层:缓存管理(CA)/页管理(PM)/视频(VL/VH)/输入(IN)/声音(SD 桩)
-        └── wl_*.cpp                # 游戏逻辑:主循环/菜单/渲染/AI/关卡
+    └── games/
+        ├── snake.cpp               # 贪吃蛇
+        ├── reaction.cpp            # 反应速度测试
+        ├── life.cpp                # 生命游戏
+        ├── xiangqi.cpp             # 中国象棋 AI
+        ├── wolf3d/                 # Wolfenstein 3D(Wolf4SDL 引擎移植)
+        │   ├── tcm_port.h          # SDL 兼容垫片:类型/键值/时钟
+        │   ├── tcm_files.{h,cpp}   # 只读"文件"层:直接访问嵌入的 WL1 数据
+        │   ├── id_*.cpp/h          # 引擎底层:缓存管理(CA)/页管理(PM)/视频(VL/VH)/输入(IN)/声音(SD 桩)
+        │   └── wl_*.cpp            # 游戏逻辑:主循环/菜单/渲染/AI/关卡
+        └── nethack/                # NetHack 5.0.0 移植(编译与架构见 src/games/nethack/编译说明.md)
+            ├── core/ tty/ sys/ lua/    # 游戏核心 / tty 接口 / POSIX 层 / Lua 5.4.8
+            ├── tcm_*.c                 # 平台层:RAM 文件系统 / 键盘映射 / 渲染 / 钩子
+            └── tcm_main.c              # 入口
 ```
 
 ## Wolfenstein 3D

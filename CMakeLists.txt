@@ -197,35 +197,7 @@ target_include_directories(tcmips_nethack PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sr
 target_compile_definitions(tcmips_nethack PRIVATE TCMIPS_PORT GCC_UMINUS_NOSTATICUNUSED NO_SIGNAL NOMAIL NO_TERMCAP_HEADERS)
 target_compile_options(tcmips_nethack PRIVATE -fsigned-char -fno-omit-frame-pointer -fno-jump-tables)
 
-if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/nhtest.c")
-  # 本地调试固件(nhtest*.c 不随仓库分发，仅本地保留)
-add_executable(tcmips_nhtest src/games/nethack/nhtest.c)
-target_compile_definitions(tcmips_nhtest PRIVATE TCMIPS_PORT)
-
-add_executable(tcmips_nhtest2 src/games/nethack/nhtest2.c src/games/nethack/tcm_vterm.c src/games/nethack/nhfont.c src/games/nethack/tcm_kbd.c )
-target_compile_definitions(tcmips_nhtest2 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest2 PRIVATE src/games/nethack src/games/nethack/include)
-
-add_executable(tcmips_nhtest3 src/games/nethack/nhtest3.c src/games/nethack/tcm_fs.c src/games/nethack/tcm_hooks.c src/games/nethack/tcm_kbd.c asset/nethack/nhdata.cpp)
-target_compile_definitions(tcmips_nhtest3 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest3 PRIVATE src/games/nethack src/games/nethack/include src/games/nethack/lua asset/nethack)
-
-add_executable(tcmips_nhtest4 src/games/nethack/nhtest4.c src/games/nethack/lua/lapi.c src/games/nethack/lua/lauxlib.c src/games/nethack/lua/lbaselib.c src/games/nethack/lua/lcode.c src/games/nethack/lua/lcorolib.c src/games/nethack/lua/lctype.c src/games/nethack/lua/ldblib.c src/games/nethack/lua/ldebug.c src/games/nethack/lua/ldo.c src/games/nethack/lua/ldump.c src/games/nethack/lua/lfunc.c src/games/nethack/lua/lgc.c src/games/nethack/lua/linit.c src/games/nethack/lua/liolib.c src/games/nethack/lua/llex.c src/games/nethack/lua/lmathlib.c src/games/nethack/lua/lmem.c src/games/nethack/lua/loadlib.c src/games/nethack/lua/lobject.c src/games/nethack/lua/lopcodes.c src/games/nethack/lua/loslib.c src/games/nethack/lua/lparser.c src/games/nethack/lua/lstate.c src/games/nethack/lua/lstring.c src/games/nethack/lua/lstrlib.c src/games/nethack/lua/ltable.c src/games/nethack/lua/ltablib.c src/games/nethack/lua/ltm.c src/games/nethack/lua/lundump.c src/games/nethack/lua/lutf8lib.c src/games/nethack/lua/lvm.c src/games/nethack/lua/lzio.c src/games/nethack/tcm_fs.c src/games/nethack/tcm_hooks.c src/games/nethack/tcm_kbd.c asset/nethack/nhdata.cpp)
-target_compile_definitions(tcmips_nhtest4 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest4 PRIVATE src/games/nethack/lua src/games/nethack src/games/nethack/include asset/nethack)
-
+# Lua VM on TCMIPS: computed-goto disabled in lvm.c; keep the switch-based
+# interpreter at -O1 (verified stable on the 4.6MHz core)
 set_source_files_properties(src/games/nethack/lua/lvm.c PROPERTIES
   COMPILE_OPTIONS "-O1")
-
-add_executable(tcmips_nhtest5 src/games/nethack/nhtest5.c src/games/nethack/tcm_hooks.c src/games/nethack/lua/lapi.c src/games/nethack/lua/lauxlib.c src/games/nethack/lua/lbaselib.c src/games/nethack/lua/lcode.c src/games/nethack/lua/lcorolib.c src/games/nethack/lua/lctype.c src/games/nethack/lua/ldblib.c src/games/nethack/lua/ldebug.c src/games/nethack/lua/ldo.c src/games/nethack/lua/ldump.c src/games/nethack/lua/lfunc.c src/games/nethack/lua/lgc.c src/games/nethack/lua/linit.c src/games/nethack/lua/liolib.c src/games/nethack/lua/llex.c src/games/nethack/lua/lmathlib.c src/games/nethack/lua/lmem.c src/games/nethack/lua/loadlib.c src/games/nethack/lua/lobject.c src/games/nethack/lua/lopcodes.c src/games/nethack/lua/loslib.c src/games/nethack/lua/lparser.c src/games/nethack/lua/lstate.c src/games/nethack/lua/lstring.c src/games/nethack/lua/lstrlib.c src/games/nethack/lua/ltable.c src/games/nethack/lua/ltablib.c src/games/nethack/lua/ltm.c src/games/nethack/lua/lundump.c src/games/nethack/lua/lutf8lib.c src/games/nethack/lua/lvm.c src/games/nethack/lua/lzio.c)
-target_compile_definitions(tcmips_nhtest5 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest5 PRIVATE src/games/nethack/lua src/games/nethack src/games/nethack/include asset/nethack)
-
-add_executable(tcmips_nhtest6 src/games/nethack/nhtest6.c)
-target_compile_definitions(tcmips_nhtest6 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest6 PRIVATE src/games/nethack)
-
-add_executable(tcmips_nhtest7 src/games/nethack/nhtest7.c src/games/nethack/tcm_fs.c src/games/nethack/tcm_kbd.c src/games/nethack/tcm_hooks.c src/games/nethack/tcm_vterm.c src/games/nethack/nhfont.c asset/nethack/nhdata.cpp)
-target_compile_definitions(tcmips_nhtest7 PRIVATE TCMIPS_PORT)
-target_include_directories(tcmips_nhtest7 PRIVATE src/games/nethack src/games/nethack/include src/games/nethack/lua asset/nethack)
-endif (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/nhtest.c")

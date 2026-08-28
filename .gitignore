@@ -19,5 +19,3 @@ test_file/
 # 本地构建/调试脚本(含本机路径,不公开)
 tools/
 
-# 本地调试固件(不公开)
-src/games/nethack/nhtest*.c
