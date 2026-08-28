@@ -32,7 +32,7 @@ sim_handle_shot(void)
         name[i++] = (char) c;
     }
     name[i] = 0;
-    snprintf(full, sizeof full, "/tmp/opencode/shots/%s", name);
+    snprintf(full, sizeof full, "shots/%s", name);
     tcm_sim_screenshot(full);
     fprintf(stderr, "[shot %s]\n", full);
 }
