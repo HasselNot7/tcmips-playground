@@ -36,7 +36,8 @@
 ** and compatible compilers.
 */
 #if !defined(LUA_USE_JUMPTABLE)
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__mips__) \
+    && !(defined(TCMIPS_PORT) && !defined(TCM_HOST))
 #define LUA_USE_JUMPTABLE	1
 #else
 #define LUA_USE_JUMPTABLE	0

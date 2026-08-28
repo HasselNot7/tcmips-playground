@@ -7,6 +7,7 @@
 
 #include "hack.h"
 
+
 #ifndef NO_SIGNAL
 #include <signal.h>
 #endif

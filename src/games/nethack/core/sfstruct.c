@@ -313,7 +313,7 @@ static long floc = 0L;
 
 staticfn int getidx(int, int);
 
-#if defined(UNIX) || defined(WIN32)
+#if (defined(UNIX) || defined(WIN32)) && !defined(TCMIPS_PORT)
 #define USE_BUFFERING
 #endif
 

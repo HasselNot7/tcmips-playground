@@ -6,6 +6,9 @@
 #include <termios.h>
 #include <unistd.h>
 
+#undef read /* host stdin must stay real read(); tcm_port.h renames it */
+extern ssize_t read(int, void *, size_t); /* real libc read */
+
 void tcm_sim_screenshot(const char *path);
 static unsigned char
 sim_readbyte(void)
@@ -41,6 +44,10 @@ sim_handle_shot(void)
 int
 tcm_getch(void)
 {
+    /* Ensure the vterm display is current before waiting for input.
+     * Without this, characters drawn since the last explicit flush
+     * stay in the target buffer and are never rendered to VRAM. */
+    tcm_vterm_flush();
 #ifdef TCM_HOST
     static int pending = -1;
     unsigned char c;
@@ -49,7 +56,7 @@ tcm_getch(void)
         pending = -1;
         return p;
     }
-    if (read(0, &c, 1) != 1)
+    if ((read)(0, &c, 1) != 1)
         return '\033';
     if (c == 0x01) {
         sim_handle_shot();
@@ -64,9 +71,9 @@ tcm_getch(void)
         ts.c_cc[VMIN] = 0;
         ts.c_cc[VTIME] = 1; /* 0.1s */
         tcsetattr(0, TCSANOW, &ts);
-        if (read(0, &b, 1) == 1) {
+        if ((read)(0, &b, 1) == 1) {
             if (b == '[' || b == 'O') {
-                if (read(0, &b, 1) == 1) {
+                if ((read)(0, &b, 1) == 1) {
                     tcsetattr(0, TCSANOW, &ots);
                     switch (b) {
                     case 'A':

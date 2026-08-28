@@ -21,6 +21,10 @@ check $SRC/tcm_fs.c        "tcm_embed_init" "sys blob copy"
 check $SRC/tcm_fs.c        "efiles"         "shadow file table"
 check $SRC/tcm_vterm.c     "render_cell"    "VRAM renderer"
 check $SRC/tcm_fs.c        "gender:female"  "options string"
+check $SRC/lua/lvm.c        "__mips__"       "lua jump table disabled"
+check $SRC/core/save.c       "in_self_recover" "savestateinlock guard"
+check $SRC/core/sfstruct.c   "TCMIPS_PORT"     "stdio buffering disabled"
+check $SRC/tcm_hooks.c       "O_CREAT"         "getlock creates 1lock.0"
 
 export CMAKE=${CMAKE:-/home/hasselnot/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake}
 export PATH=/home/hasselnot/.local/share/JetBrains/Toolbox/apps/clion/bin/ninja/linux/x64:$PATH

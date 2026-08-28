@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -12,6 +13,7 @@
 
 #ifndef TCM_HOST
 #include <dev/syscall.h>
+#include <dev/console.h>
 #endif
 
 #ifndef UNUSED
@@ -20,11 +22,32 @@
 
 unsigned long tcm_ms_base;
 
+#ifndef TCM_HOST
+unsigned long tcm_boot_ms; /* wall time at main() entry */
+
+unsigned long
+tcm_wall_ms(void)
+{
+    return (unsigned long) tcm_syscall_get_timestamp() * 1000UL
+           + (unsigned long) tcm_syscall_get_timestamp_milli();
+}
+#endif
+
 clock_t
 clock(void)
 {
     return (clock_t) (tcm_ms_base / 1000);
 }
+
+#ifndef TCM_HOST
+void
+tcm_vmp_probe(const char *tag, long a, long b)
+{
+    char tb[64];
+    snprintf(tb, sizeof tb, "%s %ld %ld\r\n", tag, a, b);
+    tcm_ascii_console_write_string(tb);
+}
+#endif
 
 unsigned long
 tcm_napms_tick(void)
@@ -122,17 +145,27 @@ chdirx(const char *dir UNUSED, boolean wr UNUSED)
 }
 
 /* port hook from unixunix.c: establish the single-player lock.
- * The filesystem is private to the console; just clear any stale lock. */
+ * Upstream getlock() creat()s an empty <lockname>.0 level-0 lock file and
+ * writes the raw hackpid into it; savestateinlock() reopens level 0 for
+ * read-modify-write at every checkpoint and treats a missing file as
+ * tampering (done(TRICKED)), so this file must exist before newgame(). */
 void
 getlock(void)
 {
-    char lockbuf[BUFSZ];
-    const char *b;
+    char *tf;
+    int fd, pid;
 
     set_savefile_name(TRUE);
-    b = strrchr(gs.SAVEF, '/');
-    Sprintf(lockbuf, "%s.lock", b ? b + 1 : gs.SAVEF);
-    (void) unlink(lockbuf);
+    tf = strrchr(gl.lock, '.');
+    if (!tf)
+        tf = eos(gl.lock);
+    Sprintf(tf, ".0");
+    fd = open(gl.lock, O_WRONLY | O_CREAT | O_TRUNC, 0660);
+    if (fd >= 0) {
+        pid = (int) getpid();
+        (void) write(fd, (genericptr_t) &pid, sizeof pid);
+        (void) close(fd);
+    }
 }
 
 /* NHUUID support: no persistent uuid on this platform */

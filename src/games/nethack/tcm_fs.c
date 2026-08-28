@@ -119,9 +119,27 @@ tcm_embed_init(void)
     efile_count = n;
 }
 
+/* diagnostic: report embed state (device bring-up debugging) */
+int
+tcm_fs_diag(char *out, int maxlen)
+{
+    int found = -1;
+    for (int i = 0; i < efile_count; i++)
+        if (!strcmp(efiles[i].name, "dungeon.lua")) {
+            found = i;
+            break;
+        }
+    return snprintf(out, (size_t) maxlen,
+                     "efile_count=%d dun_idx=%d", efile_count, found);
+}
+
+volatile int tcm_fs_open_calls;
+volatile int tcm_fs_read_calls;
+
 int
 open(const char *path, int flags, ...)
 {
+    tcm_fs_open_calls++;
     int wr = (flags & (O_WRONLY | O_RDWR)) != 0;
     rfile *f;
     int i;
@@ -565,4 +583,48 @@ setenv(const char *n UNUSED, const char *v UNUSED, int o UNUSED)
 {
     return 0;
 }
+/* libc.bc has internal references to the original POSIX names; provide
+ * strong aliases so those resolve too regardless of link order. */
+#ifndef TCM_HOST
+#undef open
+#undef read
+#undef write
+#undef close
+#undef lseek
+#undef unlink
+#undef link
+#undef creat
+#undef stat
+#undef fstat
+#undef isatty
+#undef access
+#undef rename
+#undef fcntl
+#undef getcwd
+#undef chmod
+#undef open64
+#undef creat64
+#undef openat
+#undef openat64
 
+int open(const char *p, int f, ...)  { return tcm_fs_open(p, f); }
+ssize_t read(int f, void *b, size_t n)  { return tcm_fs_read(f, b, n); }
+ssize_t write(int f, const void *b, size_t n)  { return tcm_fs_write(f, b, n); }
+int close(int f)  { return tcm_fs_close(f); }
+off_t lseek(int f, off_t o, int w)  { return tcm_fs_lseek(f, o, w); }
+int unlink(const char *p)  { return tcm_fs_unlink(p); }
+int link(const char *a, const char *b)  { return tcm_fs_link(a, b); }
+int creat(const char *p, mode_t m)  { return tcm_fs_creat(p, m); }
+int stat(const char *p, struct stat *s)  { return tcm_fs_stat(p, s); }
+int fstat(int f, struct stat *s)  { return tcm_fs_fstat(f, s); }
+int isatty(int f)  { return tcm_fs_isatty(f); }
+int access(const char *p, int m)  { return tcm_fs_access(p, m); }
+int rename(const char *a, const char *b)  { return tcm_fs_rename(a, b); }
+int fcntl(int f, int c, ...)  { return tcm_fs_fcntl(f, c); }
+char *getcwd(char *b, size_t n)  { return tcm_fs_getcwd(b, n); }
+int chmod(const char *p, mode_t m)  { return tcm_fs_chmod(p, m); }
+int open64(const char *p, int f, ...)  { return tcm_fs_open64(p, f); }
+int creat64(const char *p, mode_t m)  { return tcm_fs_creat64(p, m); }
+int openat(int d, const char *p, int f, ...)  { return tcm_fs_openat(d, p, f); }
+int openat64(int d, const char *p, int f, ...)  { return tcm_fs_openat64(d, p, f); }
+#endif /* !TCM_HOST */

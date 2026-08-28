@@ -204,17 +204,11 @@ tcm_vterm_clear(void)
         dirty[r] = 1;
     lx = ly = 0;
 #ifndef VFLUSH_HOST
-    {
-        static int resynced;
-        if (!resynced) {
-            resynced = 1;
-            tcm_ascii_console_reset();
-        }
-        else {
-            memset((void *) TCM_VRAM_ASCII_ADDR, 0,
-                   30u * 16u * 640u);
-        }
-    }
+    /* main() already ran tcm_ascii_console_init() once, so the hardware
+     * scanout is at the base page. Never call driver reset again: its
+     * re-init toggles the console mode and its own stream writes would
+     * move the scanout away from the page we render into. */
+    memset((void *) TCM_VRAM_ASCII_ADDR, 0, 30u * 16u * 640u);
 #endif
     memset(commit, 0, sizeof(commit));
 }

@@ -354,6 +354,9 @@ savestateinlock(void)
     char whynot[BUFSZ];
     NHFILE *nhfp;
 
+    if (!program_state.something_worth_saving || program_state.in_self_recover)
+        return;
+
     program_state.saving++; /* inhibit status and perm_invent updates */
     /* When checkpointing is on, the full state needs to be written
      * on each checkpoint.  When checkpointing is off, only the pid

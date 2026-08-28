@@ -672,7 +672,7 @@ typedef unsigned char uchar;
 
 /* TEMPORARY - MAKE UNCONDITIONAL BEFORE RELEASE */
 /* undef this to check if sandbox breaks something */
-#define NHL_SANDBOX
+/* #undef NHL_SANDBOX */ /* TCMIPS: sandbox init hangs; use safe subset */
 
 #ifdef NHL_SANDBOX
 #ifdef CHRONICLE

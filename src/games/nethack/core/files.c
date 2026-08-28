@@ -11,6 +11,24 @@
 
 #include "hack.h"
 
+#if defined(TCMIPS_PORT) && !defined(TCM_HOST)
+extern uint32_t tcm_ascii_console_write_string(const char *str);
+#define FSDBG(fmt, ...) do { \
+    char fsdbgbuf[96]; \
+    snprintf(fsdbgbuf, sizeof fsdbgbuf, fmt "\r\n", ##__VA_ARGS__); \
+    tcm_ascii_console_write_string(fsdbgbuf); \
+} while (0)
+#elif defined(TCMIPS_PORT) && defined(TCM_FS_HOST)
+#define FSDBG(fmt, ...) do { \
+    char fsdbgbuf[96]; \
+    snprintf(fsdbgbuf, sizeof fsdbgbuf, fmt "\n", ##__VA_ARGS__); \
+    fputs(fsdbgbuf, stderr); \
+} while (0)
+#else
+#define FSDBG(fmt, ...) ((void) 0)
+#endif
+
+
 int tcm_fp_target(void) { return 42; }
 #include "dlb.h"
 
@@ -656,6 +674,9 @@ create_levelfile(int lev, char errbuf[])
 #endif
 #endif /* MICRO || WIN32 */
 
+        if (nhfp->fd < 0)
+            FSDBG("CFL-FAIL lev=%d fq=%s fd=%d errno=%d", lev,
+                  fq_lock ? fq_lock : "?", nhfp->fd, errno);
         if (nhfp->fd >= 0)
             svl.level_info[lev].flags |= LFILE_EXISTS;
         else if (errbuf) /* failure explanation */
@@ -704,6 +725,9 @@ open_levelfile(int lev, char errbuf[])
         /* for failure, return an explanation that our caller can use;
            settle for `lock' instead of `fq_lock' because the latter
            might end up being too big for nethack's BUFSZ */
+        if (nhfp->fd < 0)
+            FSDBG("OFL-FAIL lev=%d fq=%s fd=%d errno=%d", lev,
+                  fq_lock ? fq_lock : "?", nhfp->fd, errno);
         if (nhfp->fd < 0 && errbuf)
             Sprintf(errbuf,
                     "Cannot open file \"%s\" for level %d (errno %d).",

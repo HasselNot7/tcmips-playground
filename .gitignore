@@ -1,5 +1,6 @@
 # IDE
 .idea/
+.qoder/
 
 # CLion 构建目录
 cmake-build-*/
@@ -14,3 +15,4 @@ toolchains/
 .DS_Store
 
 probes/
+test_file/

@@ -2194,6 +2194,46 @@ nhl_loadlua(lua_State *L, const char *fname)
     /* don't know whether 'fname' is inside a dlb container;
        if we did, we could choose between "nhdat(<fname>)" and "<fname>"
        but since we don't, compromise */
+    altfname = (char *) alloc(Strlen(fname) + 3); /* 3: '('...')\0' */
+    /* don't know whether 'fname' is inside a dlb container;
+       if we did, we could choose between "nhdat(<fname>)" and "<fname>"
+       but since we don't, compromise */
+#if defined(TCMIPS_PORT) && !defined(TCM_HOST)
+    /* TCMIPS: libc stdio bypasses the device filesystem, so read the
+     * script through tcm_fs_open and load it from memory. */
+
+    {
+        int tfd = tcm_fs_open(fname, 0 /* O_RDONLY */);
+        long tsz = -1;
+        if (tfd >= 0) {
+            tsz = tcm_fs_lseek(tfd, 0L, SEEK_END);
+            (void) tcm_fs_lseek(tfd, 0L, SEEK_SET);
+        }
+        if (tfd >= 0 && tsz > 0) {
+            buf = bufout = (char *) alloc(FITSint(tsz + 1 + 1));
+            buf[0] = '\0';
+            bufin = bufout = buf;
+            if (tcm_fs_read(tfd, buf, (size_t) tsz) == (ssize_t) tsz) {
+                buf[tsz] = '\0'; /* NUL-terminate for strlen() below */
+                buflen = tsz;
+                ct = 0L;
+                bufout = buf + tsz;
+                bufin = buf;
+            } else {
+                free((genericptr_t) buf);
+                buf = (char *) 0;
+            }
+        }
+        (void) tcm_fs_close(tfd >= 0 ? tfd : -1);
+        Sprintf(altfname, "(%s)", fname);
+        if (!buf) {
+            impossible("nhl_loadlua: Error opening %s", altfname);
+            ret = FALSE;
+            goto give_up;
+        }
+        goto chunksloaded;
+    }
+#else
     Sprintf(altfname, "(%s)", fname);
     fh = dlb_fopen(fname, RDBMODE);
     if (!fh) {
@@ -2205,6 +2245,7 @@ nhl_loadlua(lua_State *L, const char *fname)
     dlb_fseek(fh, 0L, SEEK_END);
     buflen = dlb_ftell(fh);
     dlb_fseek(fh, 0L, SEEK_SET);
+#endif
 
     /* extra +1: room to add final '\n' if missing */
     buf = bufout = (char *) alloc(FITSint(buflen + 1 + 1));
@@ -2265,8 +2306,10 @@ nhl_loadlua(lua_State *L, const char *fname)
         }
     }
     *bufout = '\0';
+ chunksloaded:
+#if !defined(TCMIPS_PORT) || defined(TCM_HOST)
     (void) dlb_fclose(fh);
-
+#endif
     llret = luaL_loadbuffer(L, buf, strlen(buf), altfname);
     if (llret != LUA_OK) {
         impossible("luaL_loadbuffer: Error loading %s: %s", altfname,
@@ -2321,7 +2364,17 @@ nhl_init(nhl_sandbox_info *sbi)
 #ifdef NHL_SANDBOX
     nhlL_openlibs(L, sbi->flags);
 #else
-    luaL_openlibs(L);
+    /* TCMIPS: luaL_openlibs also pulls in the package/loadlib library
+     * which needs dlopen; enable only the libraries the game uses. */
+    luaL_requiref(L, LUA_GNAME, luaopen_base, 1);
+    luaL_requiref(L, LUA_TABLIBNAME, luaopen_table, 1);
+    luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1);
+    luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1);
+    luaL_requiref(L, LUA_UTF8LIBNAME, luaopen_utf8, 1);
+    luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1);
+    luaL_requiref(L, LUA_OSLIBNAME, luaopen_os, 1);
+    luaL_requiref(L, LUA_IOLIBNAME, luaopen_io, 1);
+    lua_pop(L, 8);
 #endif
 
 #ifdef notyet

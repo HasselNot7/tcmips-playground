@@ -20,6 +20,10 @@ main(int argc UNUSED, char **argv UNUSED)
     NHFILE *nhfp;
     boolean resuming = FALSE;
 
+#ifndef TCM_HOST
+    tcm_boot_ms = tcm_wall_ms();
+#endif
+
     tcm_ascii_console_init(); /* device driver / host simulation */
     tcm_vterm_init();
 
@@ -34,7 +38,6 @@ main(int argc UNUSED, char **argv UNUSED)
     svh.hackpid = getpid();
 
     choose_windows(DEFAULT_WINDOW_SYS);
-
     initoptions();
 
     u.uhp = 1; /* prevent RIP on early quits */
@@ -52,14 +55,11 @@ main(int argc UNUSED, char **argv UNUSED)
     plnamesuffix();   /* strip role,race,&c suffix */
 
     dlb_init();
-    dlb_init();
     vision_init();
     init_sound_disp_gamewindows();
 
-            
-    if (*svp.plname) {
+    if (*svp.plname)
         getlock();
-        }
 
     if (*svp.plname && (nhfp = restore_saved_game()) != 0) {
         pline("Restoring save file...");
