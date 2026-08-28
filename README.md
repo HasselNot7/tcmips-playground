@@ -6,10 +6,15 @@
 TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像素屏、ASCII 文本屏、
 键盘。
 
+
+
 ## 演示
-![康威的生命游戏](asset/photos/conway.gif)
-![Wolfenstein 3D](asset/photos/wolf3d.gif)
-![NetHack](asset/photos/Nethack.jpg)
+
+| | |
+|---|---|
+| <img src="asset/photos/conway.gif" width="600"> | <img src="asset/photos/wolf3d.gif" width="600"> |
+| <img src="asset/photos/Nethack.jpg" width="600"> | <img src="asset/photos/xiangqi.png" width="600"> |
+
 ## 项目列表
 
 | 可执行文件 | 说明 | 操作 |
