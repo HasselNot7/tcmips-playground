@@ -197,6 +197,8 @@ target_include_directories(tcmips_nethack PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sr
 target_compile_definitions(tcmips_nethack PRIVATE TCMIPS_PORT GCC_UMINUS_NOSTATICUNUSED NO_SIGNAL NOMAIL NO_TERMCAP_HEADERS)
 target_compile_options(tcmips_nethack PRIVATE -fsigned-char -fno-omit-frame-pointer -fno-jump-tables)
 
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/nhtest.c")
+  # 本地调试固件(nhtest*.c 不随仓库分发，仅本地保留)
 add_executable(tcmips_nhtest src/games/nethack/nhtest.c)
 target_compile_definitions(tcmips_nhtest PRIVATE TCMIPS_PORT)
 
@@ -226,3 +228,4 @@ target_include_directories(tcmips_nhtest6 PRIVATE src/games/nethack)
 add_executable(tcmips_nhtest7 src/games/nethack/nhtest7.c src/games/nethack/tcm_fs.c src/games/nethack/tcm_kbd.c src/games/nethack/tcm_hooks.c src/games/nethack/tcm_vterm.c src/games/nethack/nhfont.c asset/nethack/nhdata.cpp)
 target_compile_definitions(tcmips_nhtest7 PRIVATE TCMIPS_PORT)
 target_include_directories(tcmips_nhtest7 PRIVATE src/games/nethack src/games/nethack/include src/games/nethack/lua asset/nethack)
+endif (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/games/nethack/nhtest.c")
