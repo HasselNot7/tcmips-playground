@@ -4,7 +4,7 @@
 
 使用官方 LLVM 交叉工具链把标准 C/C++ 源码编译为 `.tcm` 可执行文件,可直接在游戏内的
 TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像素屏、ASCII 文本屏、
-键盘、双排八位七段数码管、Unix 时间戳 syscall。
+键盘。
 
 ## 演示
 ![康威的生命游戏](asset/conway.gif)
