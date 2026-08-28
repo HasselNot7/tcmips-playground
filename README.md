@@ -7,9 +7,9 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 键盘。
 
 ## 演示
-![康威的生命游戏](asset/conway.gif)
-![Wolfenstein 3D](asset/wolf3d.gif)
-
+![康威的生命游戏](asset/photos/conway.gif)
+![Wolfenstein 3D](asset/photos/wolf3d.gif)
+![NetHack](asset/photos/Nethack.jpg)
 ## 项目列表
 
 | 可执行文件 | 说明 | 操作 |
