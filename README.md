@@ -26,6 +26,7 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 | `tcmips_xiangqi` | 中国象棋人机对战:完整规则 + α-β 剪枝搜索 AI,可选深度 | 方向键移动,Enter 选子/落子,退格取消,1-4 调 AI 深度,R 重开,Q 退出 |
 | `tcmips_wolf3d` | Wolfenstein 3D:Wolf4SDL 引擎移植,光线投射渲染 | 见下方按键说明 |
 | `tcmips_nethack` | NetHack 5.0.0:Roguelike 关卡数据由内嵌 Lua 驱动(有BUG未修复) | 方向键移动,Enter 确认 |
+| `tcmips_image` | 图像查看器:BMP/PNG/JPEG 解码(纯整数,含 inflate/IDCT/色度上采样),浏览内嵌样例 | 左/右换图,上 1:1,下 fit,Del 退出 |
 
 ## 目录结构
 
@@ -35,6 +36,7 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
 ├── asset/
 │   ├── conway.gif / xiangqi.png    # 演示图
 │   ├── wolf3d/wolfdata.{h,cpp}     # Wolf3D 共享版 WL1 数据生成的嵌入数组(脚本生成物)
+│   ├── images/                     # 图像查看器的样例图 src/ 与嵌入数组 imgdata.{h,cpp}
 │   └── nethack/
 │       ├── dat/                    # NetHack 运行时数据(145 个文件,含全部 .lua 关卡)
 │       └── nhdata.{h,cpp}          # dat/ 生成的嵌入数组
@@ -42,7 +44,12 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
     ├── common/
     │   └── tcm_util.h              # 延时 / 随机数工具(基于时间戳 syscall)
     ├── tools/
-    │   └── clock.cpp               # 电子钟
+    │   ├── clock.cpp               # 电子钟
+    │   └── image/                  # BMP/PNG/JPEG 解码器 + 图片查看器(纯整数实现)
+    │       ├── image{,_bmp,_png,_jpeg,_inflate}.{c,h}   # 解码器
+    │       ├── image_main.c        # 查看器主程序
+    │       ├── tools/image_gen.py  # 把 asset/images/src/ 图片重新打包成 imgdata.{h,cpp}
+    │       └── host/               # 宿主机桩(仿真显存/键盘/截图)
     └── games/
         ├── snake.cpp               # 贪吃蛇
         ├── reaction.cpp            # 反应速度测试
@@ -56,8 +63,27 @@ TCMIPS CPU 文件加载器(File Loader)中运行。目标硬件外设包括:像�
         └── nethack/                # NetHack 5.0.0 移植(编译与架构见 src/games/nethack/编译说明.md)
             ├── core/ tty/ sys/ lua/    # 游戏核心 / tty 接口 / POSIX 层 / Lua 5.4.8
             ├── tcm_*.c                 # 平台层:RAM 文件系统 / 键盘映射 / 渲染 / 钩子
+            ├── tools/                  # 嵌入数据生成/宿主构建/哨兵构建脚本
             └── tcm_main.c              # 入口
 ```
+
+## 图像查看器 (tcmips_image)
+
+TCMIPS 上的图片浏览器,固件内嵌 BMP/PNG/JPEG 样例图,用纯整数 C 解码器现场解码:
+
+- **PNG**:完整 zlib/DEFLATE 解压、全部色型(灰度/RGB/索引/带 Alpha)、1/2/4/8/16
+  位色深、Adam7 隔行、tRNS 透明
+- **JPEG**:baseline sequential,整数 IDCT(10-bit 定点两遍分离式),4:4:4/4:2:2/4:2:0
+  等采样因子,双线性色度上采样,RSTn 重启标记
+- **BMP**:1/4/8/16/24/32bpp,调色板,BI_BITFIELDS,BI_RLE8/4,自顶向下行序
+
+渲染输出到像素控制台(640×480,0x00BBGGRR),ASCII 文本屏显示当前图信息与操作提示,
+解码耗时实时显示(160×120 PNG 约 40ms)。宿主机有仿真版(桩显存+键盘,支持截图)。
+
+**添加自己的图片**:把 PNG/JPEG/BMP 放进 `asset/images/src/`,从仓库根目录运行
+`python3 src/tools/image/tools/image_gen.py` 重新生成嵌入表,再构建
+`tcmips_image` 即可。设备无文件系统,图片只能在构建期随固件嵌入;
+单图建议 ≤2048×2048,JPEG 用 baseline 模式(非 progressive)。
 
 ## Wolfenstein 3D
 

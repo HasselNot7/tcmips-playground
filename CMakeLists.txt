@@ -197,6 +197,17 @@ target_include_directories(tcmips_nethack PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sr
 target_compile_definitions(tcmips_nethack PRIVATE TCMIPS_PORT GCC_UMINUS_NOSTATICUNUSED NO_SIGNAL NOMAIL NO_TERMCAP_HEADERS)
 target_compile_options(tcmips_nethack PRIVATE -fsigned-char -fno-omit-frame-pointer -fno-jump-tables)
 
+add_executable(tcmips_image
+  src/tools/image/image.c
+  src/tools/image/image_bmp.c
+  src/tools/image/image_png.c
+  src/tools/image/image_inflate.c
+  src/tools/image/image_jpeg.c
+  src/tools/image/image_main.c
+  asset/images/imgdata.cpp
+)
+target_include_directories(tcmips_image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/asset/images)
+
 # Lua VM on TCMIPS: computed-goto disabled in lvm.c; keep the switch-based
 # interpreter at -O1 (verified stable on the 4.6MHz core)
 set_source_files_properties(src/games/nethack/lua/lvm.c PROPERTIES

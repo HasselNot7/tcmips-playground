@@ -16,6 +16,7 @@ toolchains/
 
 probes/
 test_file/
-# 本地构建/调试脚本(含本机路径,不公开)
-tools/
+# 仓库根的本机构建脚本(含本机路径,不公开)
+/tools/
+shots/
 
