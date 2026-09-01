@@ -600,6 +600,8 @@ int main() {
   uint32_t last_code = 0;
   bool player_moved = false;
 
+  draw_board();
+
   while (true) {
     uint32_t code = tcm_keyboard_get_code();
     bool fresh = (code != 0 && code != last_code);
@@ -707,7 +709,8 @@ int main() {
       }
     }
 
-    draw_board();
+    if (fresh)
+      draw_board();
     tcm_delay_ms(16);
   }
 
