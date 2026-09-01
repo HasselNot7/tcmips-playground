@@ -199,21 +199,15 @@ static int tcm_map_key(uint32_t code)
 
 static void tcm_poll_keyboard(void)
 {
-    uint32_t code = tcm_read_keyboard();
+	TcmKeyboardEvent ev; //
+	ev.raw_value = tcm_syscall_read_keyboard();
 
-    if (code == tcm_last_key) return;   // no change
+    if (ev.raw_value == 0) return;   // no change
 
-    if (tcm_last_key && tcm_last_key < SDLK_LAST)
-        Keyboard[tcm_map_key(tcm_last_key)] = 0;
-
-    tcm_last_key = code;
-
-    if (!code) return;
-
-    int key = tcm_map_key(code);
+    int key = tcm_map_key(ev.event.key_code);
     if (!key || key >= SDLK_LAST) return;
 
-    Keyboard[key] = 1;
+    Keyboard[key] = (bool)ev.event.is_press;
     LastScan = key;
 
     int sym = key;
