@@ -1053,7 +1053,7 @@ static void ai_move(int depth, Move &best, void (*on_progress)(int, int)) {
   g_fullmove++;
 }
 
-static uint32_t *vram;
+static uint32_t *VRAM;
 static const int X0 = 72, Y0 = 15, CELL = 22;
 
 static inline uint32_t rgb888(uint32_t r, uint32_t g, uint32_t b) { return (b << 16) | (g << 8) | r; }
@@ -1061,17 +1061,17 @@ static inline uint32_t rgb888(uint32_t r, uint32_t g, uint32_t b) { return (b <<
 static void fill_rect(int x, int y, int w, int h, uint32_t color) {
   for (int yy = y; yy < y + h; ++yy)
     for (int xx = x; xx < x + w; ++xx)
-      vram[yy * 320 + xx] = color;
+      VRAM[yy * 320 + xx] = color;
 }
 
 static void hline(int y, int x0, int x1, uint32_t color) {
   for (int x = x0; x <= x1; ++x)
-    vram[y * 320 + x] = color;
+    VRAM[y * 320 + x] = color;
 }
 
 static void vline(int x, int y0, int y1, uint32_t color) {
   for (int y = y0; y <= y1; ++y)
-    vram[y * 320 + x] = color;
+    VRAM[y * 320 + x] = color;
 }
 
 static const uint8_t FONT5x7[][7] = {
@@ -1146,7 +1146,7 @@ static void draw_char(int x, int y, char ch, uint32_t color) {
     uint8_t bits = g[row];
     for (int col = 0; col < 5; ++col)
       if (bits & (0x10 >> col))
-        vram[(y + row) * 320 + (x + col)] = color;
+        VRAM[(y + row) * 320 + (x + col)] = color;
   }
 }
 
@@ -1393,9 +1393,9 @@ static void draw_hanzi(int x, int y, int idx, uint32_t color) {
     uint8_t R = tbl[row][1];
     for (int c = 0; c < 5; ++c) {
       if (L & (0x10 >> c))
-        vram[(y + row) * 320 + (x + c)] = color;
+        VRAM[(y + row) * 320 + (x + c)] = color;
       if (R & (0x10 >> c))
-        vram[(y + row) * 320 + (x + 5 + c)] = color;
+        VRAM[(y + row) * 320 + (x + 5 + c)] = color;
     }
   }
 }
@@ -1435,7 +1435,7 @@ static void draw_piece(int f, int r) {
       int r2 = dx * dx + dy * dy;
       if (r2 > 81)
         continue;
-      vram[(cy + dy) * 320 + (cx + dx)] = (r2 <= 64) ? wood : edge;
+      VRAM[(cy + dy) * 320 + (cx + dx)] = (r2 <= 64) ? wood : edge;
     }
   }
 
@@ -1445,14 +1445,14 @@ static void draw_piece(int f, int r) {
 static void ring(int f, int r, uint32_t col) {
   int x = X0 + f * CELL - 9, y = Y0 + r * CELL - 9;
   for (int i = 0; i < 18; ++i) {
-    vram[y * 320 + x + i] = col;
-    vram[(y + 1) * 320 + x + i] = col;
-    vram[(y + 17) * 320 + x + i] = col;
-    vram[(y + 16) * 320 + x + i] = col;
-    vram[(y + i) * 320 + x] = col;
-    vram[(y + i) * 320 + x + 1] = col;
-    vram[(y + i) * 320 + x + 17] = col;
-    vram[(y + i) * 320 + x + 16] = col;
+    VRAM[y * 320 + x + i] = col;
+    VRAM[(y + 1) * 320 + x + i] = col;
+    VRAM[(y + 17) * 320 + x + i] = col;
+    VRAM[(y + 16) * 320 + x + i] = col;
+    VRAM[(y + i) * 320 + x] = col;
+    VRAM[(y + i) * 320 + x + 1] = col;
+    VRAM[(y + i) * 320 + x + 17] = col;
+    VRAM[(y + i) * 320 + x + 16] = col;
   }
 }
 
@@ -1499,14 +1499,15 @@ static void draw_status(const char *override = nullptr) {
   draw_char(312, 232, (char)('0' + depth), rgb888(255, 255, 255));
 }
 
-static void draw_board() {
+static void draw_board(bool redraw_piece = true) {
   const uint32_t line = rgb888(150, 130, 100);
 
-  static bool Background_init = false;
+  static bool Background_Init = false;
+  static bool Board_Piece_Buffer[320 * 240 * 4];
 
-  memcpy(vram, Xiangqi_Background, 320 * 240 * 4);
+  if (!Background_Init) {
+    memcpy(VRAM, Xiangqi_Background, 320 * 240 * 4);
 
-  if (!Background_init) {
     hline(Y0 - 3, X0 - 3, X0 + 8 * CELL + 3, line);
     hline(Y0 - 2, X0 - 2, X0 + 8 * CELL + 2, line);
     hline(Y0 + 9 * CELL + 3, X0 - 3, X0 + 8 * CELL + 3, line);
@@ -1530,10 +1531,10 @@ static void draw_board() {
     }
 
     for (int i = 0; i <= 2 * CELL; ++i) {
-      vram[(Y0 + i) * 320 + X0 + 3 * CELL + i] = line;
-      vram[(Y0 + i) * 320 + X0 + 5 * CELL - i] = line;
-      vram[(Y0 + 9 * CELL - i) * 320 + X0 + 3 * CELL + i] = line;
-      vram[(Y0 + 9 * CELL - i) * 320 + X0 + 5 * CELL - i] = line;
+      VRAM[(Y0 + i) * 320 + X0 + 3 * CELL + i] = line;
+      VRAM[(Y0 + i) * 320 + X0 + 5 * CELL - i] = line;
+      VRAM[(Y0 + 9 * CELL - i) * 320 + X0 + 3 * CELL + i] = line;
+      VRAM[(Y0 + 9 * CELL - i) * 320 + X0 + 5 * CELL - i] = line;
     }
 
     auto draw_mark = [&](int x, int y, bool l = true, bool r = true) {
@@ -1570,12 +1571,19 @@ static void draw_board() {
     draw_mark(6, 6);
     draw_mark(8, 6, true, false);
 
-    memcpy(Xiangqi_Background, vram, 320 * 240 * 4);
+    memcpy(Xiangqi_Background, VRAM, 320 * 240 * 4);
+    Background_Init = true;
   }
 
-  for (int r = 0; r < RANKS; ++r)
-    for (int f = 0; f < FILES; ++f)
-      draw_piece(f, r);
+  if (redraw_piece) {
+    memcpy(VRAM, Xiangqi_Background, 320 * 240 * 4);
+    for (int r = 0; r < RANKS; ++r)
+      for (int f = 0; f < FILES; ++f)
+        draw_piece(f, r);
+    memcpy(Board_Piece_Buffer, VRAM, 320 * 240 * 4);
+  } else {
+    memcpy(VRAM, Board_Piece_Buffer, 320 * 240 * 4);
+  }
 
   if (selected) {
     for (int i = 0; i < n_legals; ++i)
@@ -1588,7 +1596,7 @@ static void draw_board() {
     for (int dy = -3; dy <= 3; ++dy)
       for (int dx = -3; dx <= 3; ++dx)
         if (dx * dx + dy * dy <= 9)
-          vram[(y + dy) * 320 + (x + dx)] = rgb888(255, 160, 60);
+          VRAM[(y + dy) * 320 + (x + dx)] = rgb888(255, 160, 60);
     ring(ai_sel_f, ai_sel_r, rgb888(255, 160, 60));
   }
 
@@ -1639,7 +1647,7 @@ static void ai_progress(int progress, int max) {
 
 int main() {
   tcm_ascii_console_init();
-  vram = (uint32_t *)tcm_pixel_console_init(CONSOLE_MODE_PIXEL_32, 320);
+  VRAM = (uint32_t *)tcm_pixel_console_init(CONSOLE_MODE_PIXEL_32, 320);
   tcm_pixel_console_clear();
   depth = 3;
   new_game();
@@ -1730,7 +1738,6 @@ int main() {
     }
 
     if (player_moved) {
-      player_moved = false;
       Move tmp[128];
       if (gen_legal_moves(BLACK, tmp) == 0) {
         game_over = true;
@@ -1781,9 +1788,11 @@ int main() {
     }
 
     if (fresh) {
-      draw_board();
+      draw_board(player_moved);
       draw_status();
     }
+
+    player_moved = false;
   }
 
   tcm_pixel_console_clear();
