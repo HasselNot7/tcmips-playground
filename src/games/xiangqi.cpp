@@ -1738,7 +1738,7 @@ int main() {
         printf("You win!\n");
       } else {
         ai_thinking = true;
-        // draw_board();
+        draw_board();
         draw_status();
 
         Move best;
