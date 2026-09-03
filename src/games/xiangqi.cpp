@@ -1,6 +1,7 @@
 #include "../common/tcm_util.h"
 #include "xiangqi_bg.h"
 #include "xiangqi_book.h"
+#include "xiangqi_font32.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -9,6 +10,10 @@
 #include <dev/keyboard.h>
 
 enum { FILES = 9, RANKS = 10, RED = 0, BLACK = 1 };
+
+// Display resolution: doubled from the original 320x240 to 640x480.
+// All drawing constants are scaled by SCALE.
+enum { SCREEN_W = 640, SCREEN_H = 480, SCALE = 2 };
 
 enum {
   P_PAWN = 0,     // 兵/卒
@@ -392,7 +397,10 @@ static int gen_legal_moves(int side, Move *out) {
   return m;
 }
 
-enum { TT_BITS = 18, TT_SIZE = 1 << TT_BITS, TT_MASK = TT_SIZE - 1 };
+// Two-bucket TT: same total memory as the previous single bucket, but keeps
+// two entries per slot so deep entries are less likely to be flushed by
+// shallow collisions.
+enum { TT_BITS = 17, TT_SIZE = 1 << TT_BITS, TT_MASK = TT_SIZE - 1 };
 
 enum { TT_EXACT = 0, TT_LOWER = 1, TT_UPPER = 2 };
 
@@ -412,7 +420,7 @@ struct TTEntry {
   uint16_t df;
 };
 
-static TTEntry tt[TT_SIZE];
+static TTEntry tt[TT_SIZE][2];
 
 static inline uint16_t pack_move(const Move &m) {
   return (uint16_t)(m.from_f | (m.from_r << 4) | (m.to_f << 8) | (m.to_r << 12));
@@ -560,6 +568,34 @@ static const uint64_t SIDE_KEY = 0x9e3779b97f4a7c15ull;
 static uint64_t rep_hash[128];
 static int rep_len = 0;
 
+static const int NO_REPETITION = MATE + 1000;
+
+// Score a repeated position. Returns NO_REPETITION if not a 3-fold repeat.
+// On a repeat, distinguish perpetual-check (illegal and losing for the side
+// that keeps checking) from a plain draw:
+//   - if the side to move is currently in check, the opponent has been
+//     perpetually checking, so we score a win for side-to-move;
+//   - if the side to move attacks the enemy king, we have been checking,
+//     so we score a loss for side-to-move;
+//   - otherwise it is a draw.
+static int repetition_score(int side) {
+  if (rep_len < 4)
+    return NO_REPETITION;
+  int cnt = 1;
+  for (int i = rep_len - 2; i >= 0; i -= 2) {
+    if (rep_hash[i] == g_hash)
+      cnt++;
+    if (cnt >= 3) {
+      if (attacked(king_f[side], king_r[side], 1 - side))
+        return MATE - 5000;          // opponent perpetual check → side wins
+      if (attacked(king_f[1 - side], king_r[1 - side], side))
+        return -(MATE - 5000);       // side perpetual check → side loses
+      return 0;                      // plain draw
+    }
+  }
+  return NO_REPETITION;
+}
+
 static bool is_draw() {
   if (rep_len < 4)
     return false;
@@ -704,6 +740,15 @@ static int see(const Move &mv, int side) {
   return value;
 }
 
+// Sum of non-King piece values for one side (King value is 0, excluded naturally).
+// Used for null-move safety: enough material → zugzwang unlikely → skip verification.
+static int side_material(int side) {
+  int m = 0;
+  for (int i = 0; i < piece_n[side]; i++)
+    m += PIECE_VALUE[type_of(piece_code[side][i])];
+  return m;
+}
+
 enum { Q_MAX_PLY = 8 };
 
 static int qsearch(int alpha, int beta, int side, int ply) {
@@ -714,6 +759,10 @@ static int qsearch(int alpha, int beta, int side, int ply) {
     alpha = stand;
   if (ply >= Q_MAX_PLY)
     return stand;
+
+  int rep = repetition_score(side);
+  if (rep != NO_REPETITION)
+    return rep;
 
   Move moves[128];
   int n = gen_legal_moves(side, moves);
@@ -800,29 +849,50 @@ static int qsearch(int alpha, int beta, int side, int ply) {
   return best;
 }
 
-static int search(int depth, int alpha, int beta, int side, int ply) {
+static int search(int depth, int alpha, int beta, int side, int ply, bool no_null = false) {
   if (ply >= MAX_PLY)
     return evaluate(side);
 
   uint64_t key = g_hash ^ (side ? SIDE_KEY : 0);
   uint32_t idx = (uint32_t)(key & TT_MASK);
-  TTEntry &e = tt[idx];
+  TTEntry &e0 = tt[idx][0];
+  TTEntry &e1 = tt[idx][1];
 
-  if (rep_len > 0 && is_draw())
-    return 0;
+  int rep = repetition_score(side);
+  if (rep != NO_REPETITION)
+    return rep;
 
-  if (depth >= 1 && e.key == key) {
-    int rec_d = e.df & 0xFF;
-    if (rec_d >= depth) {
-      int v = e.value, fl = e.df >> 8;
-      if (fl == TT_EXACT)
-        return v;
-      if (fl == TT_LOWER) {
-        if (v >= beta)
-          return v;
-      } else if (v <= alpha)
-        return v;
+  auto tt_probe = [&](TTEntry &e, int depth, int alpha, int beta, int *out_v) -> bool {
+    if (e.key == key) {
+      int rec_d = e.df & 0xFF;
+      if (rec_d >= depth) {
+        int v = e.value, fl = e.df >> 8;
+        if (fl == TT_EXACT) {
+          *out_v = v;
+          return true;
+        }
+        if (fl == TT_LOWER) {
+          if (v >= beta) {
+            *out_v = v;
+            return true;
+          }
+        } else { // TT_UPPER
+          if (v <= alpha) {
+            *out_v = v;
+            return true;
+          }
+        }
+      }
     }
+    return false;
+  };
+
+  int tt_v;
+  if (depth >= 1) {
+    if (tt_probe(e0, depth, alpha, beta, &tt_v))
+      return tt_v;
+    if (tt_probe(e1, depth, alpha, beta, &tt_v))
+      return tt_v;
   }
 
   Move moves[128];
@@ -837,7 +907,40 @@ static int search(int depth, int alpha, int beta, int side, int ply) {
       return qsearch(alpha, beta, side, ply);
   }
 
-  uint16_t pref = (e.key == key) ? e.move : 0;
+  // Futility pruning at frontier nodes (depth == 1, not in check):
+  // if even our best quiet hope cannot reach alpha, save a full depth-1
+  // search and resolve only captures via qsearch.
+  const int FUTIL_MARGIN = 150;
+  if (depth == 1 && !attacked(king_f[side], king_r[side], 1 - side)) {
+    int stand = evaluate(side);
+    if (stand + FUTIL_MARGIN <= alpha)
+      return qsearch(alpha, beta, side, ply);
+  }
+
+  // Null-move pruning (R=2): skip a turn to get a cheap beta cutoff.
+  // Not when in check, not with too few pieces (zugzwang safety).
+  // no_null prevents null-move chains and is used by the verification search.
+  if (!no_null && depth >= 3 && !attacked(king_f[side], king_r[side], 1 - side) && piece_n[side] >= 3) {
+    g_hash ^= SIDE_KEY;
+    int null_score = -search(depth - 3, -beta, -beta + 1, 1 - side, ply + 1, true);
+    g_hash ^= SIDE_KEY;
+    if (null_score >= beta) {
+      // NullSafe: enough material → zugzwang unlikely → trust the cutoff.
+      if (side_material(side) > 400)
+        return beta;
+      // Not safe: verify with a real (non-null) search at depth-2.
+      // If it also cuts, the null-move result was not a false positive.
+      if (search(depth - 2, beta - 1, beta, side, ply, true) >= beta)
+        return beta;
+      // Verification failed → fall through to normal search.
+    }
+  }
+
+  uint16_t pref = 0;
+  if (e0.key == key)
+    pref = e0.move;
+  else if (e1.key == key)
+    pref = e1.move;
   g_cur_side = side;
   int saved_ply = g_ply;
   g_ply = ply;
@@ -911,12 +1014,25 @@ static int search(int depth, int alpha, int beta, int side, int ply) {
   }
   g_ply = saved_ply;
   int fl = (alpha >= beta) ? TT_LOWER : (best <= orig_alpha ? TT_UPPER : TT_EXACT);
-  int old_d = e.df & 0xFF;
-  if (e.key != key || depth >= old_d) {
-    e.key = key;
-    e.value = best;
-    e.move = pack_move(best_move);
-    e.df = (uint16_t)(depth | (fl << 8));
+  uint16_t packed = pack_move(best_move);
+
+  // Two-bucket store: update an existing key if depth is sufficient; otherwise
+  // overwrite the shallower (or empty) bucket.
+  TTEntry *slot = nullptr;
+  if (e0.key == key)
+    slot = &e0;
+  else if (e1.key == key)
+    slot = &e1;
+  else {
+    int d0 = (e0.key == 0) ? 0 : (e0.df & 0xFF);
+    int d1 = (e1.key == 0) ? 0 : (e1.df & 0xFF);
+    slot = (d0 <= d1) ? &e0 : &e1;
+  }
+  if (slot->key != key || depth >= (int)(slot->df & 0xFF)) {
+    slot->key = key;
+    slot->value = best;
+    slot->move = packed;
+    slot->df = (uint16_t)(depth | (fl << 8));
   }
   return best;
 }
@@ -925,71 +1041,128 @@ static int g_fullmove = 0;
 
 struct BookInfo {
   bool hit = false;
-  int idx = -1;
+  uint32_t lock = 0;
+  int ncand = 0;
   int choice = -1;
   Move mv{0, 0, 0, 0};
 };
 
 static BookInfo g_last_book;
 
-static bool book_probe(Move *mv, BookInfo *info) {
+// Compute left-right mirrored hash from current piece positions
+static uint64_t compute_mirror_hash() {
+  uint64_t h = 0;
+  for (int c = 0; c < 2; c++)
+    for (int i = 0; i < piece_n[c]; i++) {
+      int f = piece_f[c][i], r = piece_r[c][i];
+      uint8_t pc = piece_code[c][i];
+      h ^= Z[type_of(pc)][c][(8 - f) + r * FILES];
+    }
+  return h;
+}
+
+static inline Move mirror_move(const Move &m) {
+  return Move{(int8_t)(8 - m.from_f), m.from_r, (int8_t)(8 - m.to_f), m.to_r};
+}
+
+static bool book_probe(Move *mv, BookInfo *info, int side) {
   if (g_fullmove >= 10)
     return false;
-  uint64_t key = g_hash;
-  int lo = 0, hi = BOOK_HB_N - 1;
   if (info)
     info->hit = false;
-  int idx = -1;
-  while (lo <= hi) {
-    int mid = (lo + hi) / 2;
-    if (BOOK_HASH2[mid].h < key)
-      lo = mid + 1;
-    else if (BOOK_HASH2[mid].h > key)
-      hi = mid - 1;
-    else {
-      idx = mid;
-      break;
-    }
-  }
-  if (idx < 0)
-    return false;
+
+  uint64_t key = g_hash ^ (side ? SIDE_KEY : 0);
+  uint64_t key_mirror = compute_mirror_hash() ^ (side ? SIDE_KEY : 0);
+  uint32_t locks[2] = {(uint32_t)(key >> 32), (uint32_t)(key_mirror >> 32)};
+  bool is_mirror[2] = {false, true};
 
   Move legal[128];
-  int ln = gen_legal_moves(BLACK, legal);
-  Move cand[2];
-  int cn = 0;
-  uint16_t bmv[2] = {BOOK_HASH2[idx].bm0, BOOK_HASH2[idx].bm1};
-  for (int k = 0; k < 2; ++k) {
-    if (bmv[k] == 0)
-      continue;
-    Move t{(int8_t)(bmv[k] & 0xF), (int8_t)((bmv[k] >> 4) & 0xF), (int8_t)((bmv[k] >> 8) & 0xF),
-           (int8_t)((bmv[k] >> 12) & 0xF)};
-    for (int i = 0; i < ln; ++i)
-      if (legal[i].from_f == t.from_f && legal[i].from_r == t.from_r && legal[i].to_f == t.to_f &&
-          legal[i].to_r == t.to_r) {
-        cand[cn++] = t;
+  int ln = gen_legal_moves(side, legal);
+
+  for (int scan = 0; scan < 2; scan++) {
+    uint32_t lock = locks[scan];
+    int lo = 0, hi = BOOK_HB_N - 1;
+    int idx = -1;
+    while (lo <= hi) {
+      int mid = (lo + hi) / 2;
+      if (BOOK_HASH2[mid].lock < lock)
+        lo = mid + 1;
+      else if (BOOK_HASH2[mid].lock > lock)
+        hi = mid - 1;
+      else {
+        idx = mid;
         break;
       }
+    }
+    if (idx < 0)
+      continue;
+
+    // Scan all entries sharing this 32-bit lock (collisions are likely
+    // with 311k entries in a 32-bit lock space); legal-move validation
+    // is the only way to tell which one is the actual position.
+    Move cand[8];
+    int cn = 0;
+    int j = idx;
+    while (j >= 0 && BOOK_HASH2[j].lock == lock) {
+      for (int k = 0; k < 2; k++) {
+        uint16_t bmv = (k == 0) ? BOOK_HASH2[j].wmv0 : BOOK_HASH2[j].wmv1;
+        if (bmv == 0)
+          continue;
+        Move t{(int8_t)(bmv & 0xF), (int8_t)((bmv >> 4) & 0xF), (int8_t)((bmv >> 8) & 0xF),
+               (int8_t)((bmv >> 12) & 0xF)};
+        if (is_mirror[scan])
+          t = mirror_move(t);
+        for (int i = 0; i < ln; i++)
+          if (legal[i].from_f == t.from_f && legal[i].from_r == t.from_r && legal[i].to_f == t.to_f &&
+              legal[i].to_r == t.to_r) {
+            if (cn < (int)(sizeof(cand) / sizeof(cand[0])))
+              cand[cn++] = t;
+            break;
+          }
+      }
+      j--;
+    }
+    j = idx + 1;
+    while (j < BOOK_HB_N && BOOK_HASH2[j].lock == lock) {
+      for (int k = 0; k < 2; k++) {
+        uint16_t bmv = (k == 0) ? BOOK_HASH2[j].wmv0 : BOOK_HASH2[j].wmv1;
+        if (bmv == 0)
+          continue;
+        Move t{(int8_t)(bmv & 0xF), (int8_t)((bmv >> 4) & 0xF), (int8_t)((bmv >> 8) & 0xF),
+               (int8_t)((bmv >> 12) & 0xF)};
+        if (is_mirror[scan])
+          t = mirror_move(t);
+        for (int i = 0; i < ln; i++)
+          if (legal[i].from_f == t.from_f && legal[i].from_r == t.from_r && legal[i].to_f == t.to_f &&
+              legal[i].to_r == t.to_r) {
+            if (cn < (int)(sizeof(cand) / sizeof(cand[0])))
+              cand[cn++] = t;
+            break;
+          }
+      }
+      j++;
+    }
+
+    if (cn > 0) {
+      int pick = rand() % cn;
+      *mv = cand[pick];
+      if (info) {
+        info->hit = true;
+        info->lock = lock;
+        info->ncand = cn;
+        info->choice = pick;
+        info->mv = *mv;
+      }
+      return true;
+    }
   }
-  if (cn == 0)
-    return false;
-  *mv = cand[rand() % cn];
-  if (info) {
-    info->hit = true;
-    info->idx = idx;
-    int8_t mf = mv->from_f, mr = mv->from_r, mtf = mv->to_f, mtr = mv->to_r;
-    bool is_bm0 = (mf == (int8_t)(bmv[0] & 0xF) && mr == (int8_t)((bmv[0] >> 4) & 0xF) &&
-                   mtf == (int8_t)((bmv[0] >> 8) & 0xF) && mtr == (int8_t)((bmv[0] >> 12) & 0xF));
-    info->choice = is_bm0 ? 0 : 1;
-    info->mv = *mv;
-  }
-  return true;
+  return false;
 }
 
 static void ai_move(int depth, Move &best, void (*on_progress)(int, int)) {
   Move book_best;
   BookInfo bi;
-  if (book_probe(&book_best, &bi)) {
+  if (book_probe(&book_best, &bi, BLACK)) {
     Move tmp[128];
     int bn = gen_legal_moves(BLACK, tmp);
     bool found = false;
@@ -1054,24 +1227,24 @@ static void ai_move(int depth, Move &best, void (*on_progress)(int, int)) {
 }
 
 static uint32_t *VRAM;
-static const int X0 = 72, Y0 = 15, CELL = 22;
+static const int X0 = 72 * SCALE, Y0 = 15 * SCALE, CELL = 22 * SCALE;
 
 static inline uint32_t rgb888(uint32_t r, uint32_t g, uint32_t b) { return (b << 16) | (g << 8) | r; }
 
 static void fill_rect(int x, int y, int w, int h, uint32_t color) {
   for (int yy = y; yy < y + h; ++yy)
     for (int xx = x; xx < x + w; ++xx)
-      VRAM[yy * 320 + xx] = color;
+      VRAM[yy * SCREEN_W + xx] = color;
 }
 
 static void hline(int y, int x0, int x1, uint32_t color) {
   for (int x = x0; x <= x1; ++x)
-    VRAM[y * 320 + x] = color;
+    VRAM[y * SCREEN_W + x] = color;
 }
 
 static void vline(int x, int y0, int y1, uint32_t color) {
   for (int y = y0; y <= y1; ++y)
-    VRAM[y * 320 + x] = color;
+    VRAM[y * SCREEN_W + x] = color;
 }
 
 static const uint8_t FONT5x7[][7] = {
@@ -1140,262 +1313,59 @@ static int char_index(char ch) {
   return 42;
 }
 
+// Scale the built-in 5x7 ASCII font to 10x14 for the 640x480 display.
 static void draw_char(int x, int y, char ch, uint32_t color) {
   const uint8_t *g = FONT5x7[char_index(ch)];
   for (int row = 0; row < 7; ++row) {
     uint8_t bits = g[row];
-    for (int col = 0; col < 5; ++col)
-      if (bits & (0x10 >> col))
-        VRAM[(y + row) * 320 + (x + col)] = color;
+    for (int col = 0; col < 5; ++col) {
+      if (bits & (0x10 >> col)) {
+        int bx = x + col * SCALE;
+        int by = y + row * SCALE;
+        VRAM[by * SCREEN_W + bx] = color;
+        VRAM[by * SCREEN_W + (bx + 1)] = color;
+        VRAM[(by + 1) * SCREEN_W + bx] = color;
+        VRAM[(by + 1) * SCREEN_W + (bx + 1)] = color;
+      }
+    }
   }
 }
 
 static void draw_text(int x, int y, const char *s, uint32_t color) {
   while (*s) {
     draw_char(x, y, *s, color);
-    x += 6;
+    x += 6 * SCALE;
     ++s;
   }
 }
 
 enum {
-  HANZI_JIANG,  // 將
-  HANZI_SHUAI,  // 帥
-  HANZI_SHIS,   // 仕
-  HANZI_SHI,    // 士
-  HANZI_XIANGX, // 相
-  HANZI_XIANG,  // 象
-  HANZI_CHE,    // 车
-  HANZI_MA,     // 傌
-  HANZI_PAO,    // 砲
-  HANZI_PING,   // 兵
-  HANZI_ZU,     // 卒
+  HANZI_CHE_BLACK,   // 車
+  HANZI_CHE_RED,     // 车
+  HANZI_MA,          // 马
+  HANZI_XIANG_RED,   // 相
+  HANZI_SHI_RED,     // 仕
+  HANZI_SHI_BLACK,   // 士
+  HANZI_JIANG,       // 将
+  HANZI_SHUAI,       // 帅
+  HANZI_XIANG_BLACK, // 象
+  HANZI_PING,        // 兵
+  HANZI_ZU,          // 卒
+  HANZI_PAO,         // 炮
   HANZI_N
 };
 
-static const uint8_t FONT_HANZI[HANZI_N][16][2] = {
-    // 將
-    {
-        {0x04, 0x18},
-        {0x06, 0x1A},
-        {0x07, 0x1E},
-        {0x1F, 0x1E},
-        {0x1F, 0x1E},
-        {0x1F, 0x1C},
-        {0x0E, 0x1E},
-        {0x0F, 0x1E},
-        {0x0F, 0x1F},
-        {0x1F, 0x1F},
-        {0x1F, 0x16},
-        {0x1F, 0x16},
-        {0x07, 0x16},
-        {0x06, 0x1E},
-        {0x06, 0x1E},
-        {0x06, 0x0C},
-    },
-    // 帥
-    {
-        {0x06, 0x0C},
-        {0x06, 0x0C},
-        {0x06, 0x08},
-        {0x0E, 0x0A},
-        {0x0F, 0x1F},
-        {0x0F, 0x1A},
-        {0x0F, 0x1A},
-        {0x0F, 0x1A},
-        {0x0F, 0x1A},
-        {0x0F, 0x1A},
-        {0x0F, 0x1A},
-        {0x07, 0x1E},
-        {0x0D, 0x0E},
-        {0x1C, 0x08},
-        {0x18, 0x08},
-        {0x18, 0x08},
-    },
-    // 仕
-    {
-        {0x06, 0x18},
-        {0x06, 0x18},
-        {0x06, 0x18},
-        {0x06, 0x18},
-        {0x0C, 0x1B},
-        {0x0F, 0x1F},
-        {0x0F, 0x1F},
-        {0x1E, 0x18},
-        {0x1C, 0x18},
-        {0x14, 0x18},
-        {0x04, 0x18},
-        {0x04, 0x18},
-        {0x07, 0x1F},
-        {0x07, 0x1F},
-        {0x07, 0x00},
-        {0x04, 0x00},
-    },
-    // 士
-    {
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x12},
-        {0x1F, 0x1F},
-        {0x1F, 0x1F},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x0F, 0x1E},
-        {0x0F, 0x1E},
-        {0x0C, 0x00},
-        {0x00, 0x00},
-    },
-    // 相
-    {
-        {0x06, 0x00},
-        {0x06, 0x12},
-        {0x06, 0x1F},
-        {0x06, 0x1F},
-        {0x1F, 0x12},
-        {0x1F, 0x1E},
-        {0x1E, 0x1E},
-        {0x0F, 0x12},
-        {0x0F, 0x1E},
-        {0x0F, 0x1E},
-        {0x0E, 0x12},
-        {0x1E, 0x12},
-        {0x1E, 0x1E},
-        {0x06, 0x1E},
-        {0x06, 0x12},
-        {0x06, 0x12},
-    },
-    // 象
-    {
-        {0x03, 0x00},
-        {0x07, 0x18},
-        {0x07, 0x1C},
-        {0x06, 0x1C},
-        {0x1F, 0x1E},
-        {0x1D, 0x16},
-        {0x1F, 0x1E},
-        {0x0F, 0x1E},
-        {0x07, 0x1E},
-        {0x0F, 0x1C},
-        {0x0F, 0x1C},
-        {0x0F, 0x1C},
-        {0x0F, 0x1F},
-        {0x1F, 0x1F},
-        {0x1F, 0x1A},
-        {0x19, 0x10},
-    },
-    // 车
-    {
-        {0x03, 0x00},
-        {0x03, 0x00},
-        {0x03, 0x06},
-        {0x0F, 0x1E},
-        {0x0F, 0x10},
-        {0x07, 0x10},
-        {0x07, 0x14},
-        {0x0F, 0x1E},
-        {0x0D, 0x10},
-        {0x01, 0x13},
-        {0x1F, 0x1F},
-        {0x1F, 0x1F},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-    },
-    // 傌
-    {
-        {0x0F, 0x1C},
-        {0x0F, 0x1C},
-        {0x0E, 0x0C},
-        {0x06, 0x0C},
-        {0x06, 0x0C},
-        {0x06, 0x0C},
-        {0x06, 0x0E},
-        {0x07, 0x1F},
-        {0x06, 0x06},
-        {0x00, 0x0E},
-        {0x1F, 0x1E},
-        {0x1F, 0x1E},
-        {0x00, 0x1E},
-        {0x00, 0x1E},
-        {0x00, 0x1E},
-        {0x00, 0x0C},
-    },
-    // 砲
-    {
-        {0x0C, 0x10},
-        {0x0F, 0x18},
-        {0x0D, 0x1A},
-        {0x07, 0x1F},
-        {0x0F, 0x16},
-        {0x1F, 0x1E},
-        {0x1F, 0x1E},
-        {0x1F, 0x1E},
-        {0x0D, 0x1E},
-        {0x0F, 0x1E},
-        {0x0F, 0x1F},
-        {0x0F, 0x1F},
-        {0x0F, 0x17},
-        {0x1B, 0x1F},
-        {0x19, 0x1F},
-        {0x18, 0x00},
-    },
-    // 兵
-    {
-        {0x00, 0x0C},
-        {0x07, 0x1C},
-        {0x07, 0x1C},
-        {0x06, 0x00},
-        {0x07, 0x1E},
-        {0x07, 0x1E},
-        {0x06, 0x18},
-        {0x06, 0x18},
-        {0x06, 0x1B},
-        {0x1F, 0x1F},
-        {0x1F, 0x1F},
-        {0x03, 0x1C},
-        {0x0F, 0x0E},
-        {0x0E, 0x06},
-        {0x1C, 0x06},
-        {0x18, 0x02},
-    },
-    // 卒
-    {
-        {0x01, 0x10},
-        {0x01, 0x16},
-        {0x0F, 0x1E},
-        {0x0F, 0x1E},
-        {0x06, 0x1C},
-        {0x07, 0x1C},
-        {0x07, 0x1C},
-        {0x0F, 0x1E},
-        {0x0F, 0x16},
-        {0x1F, 0x1F},
-        {0x1F, 0x1F},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-        {0x01, 0x10},
-    },
-};
-
+// Draw a Chinese piece character at 32x32.
+// FONT_HANZI32 is a 32*48 byte flat array, with 12 glyphs of 4 bytes per row.
 static void draw_hanzi(int x, int y, int idx, uint32_t color) {
-  const uint8_t (*tbl)[2] = FONT_HANZI[idx];
-
-  for (int row = 0; row < 16; ++row) {
-    uint8_t L = tbl[row][0];
-    uint8_t R = tbl[row][1];
-    for (int c = 0; c < 5; ++c) {
-      if (L & (0x10 >> c))
-        VRAM[(y + row) * 320 + (x + c)] = color;
-      if (R & (0x10 >> c))
-        VRAM[(y + row) * 320 + (x + 5 + c)] = color;
+  for (int row = 0; row < 32; ++row) {
+    const uint8_t *glyph_row = FONT_HANZI32 + row * 48 + idx * 4;
+    for (int b = 0; b < 4; ++b) {
+      uint8_t bits = glyph_row[b];
+      for (int bit = 0; bit < 8; ++bit) {
+        if (bits & (0x80 >> bit))
+          VRAM[(y + row) * SCREEN_W + (x + b * 8 + bit)] = color;
+      }
     }
   }
 }
@@ -1410,11 +1380,11 @@ static int piece_hanzi(uint8_t code) {
   case P_HORSE:
     return HANZI_MA;
   case P_ROOK:
-    return HANZI_CHE;
+    return col == RED ? HANZI_CHE_RED : HANZI_CHE_BLACK;
   case P_ELEPHANT:
-    return col == RED ? HANZI_XIANGX : HANZI_XIANG;
+    return col == RED ? HANZI_XIANG_RED : HANZI_XIANG_BLACK;
   case P_ADVISOR:
-    return col == RED ? HANZI_SHIS : HANZI_SHI;
+    return col == RED ? HANZI_SHI_RED : HANZI_SHI_BLACK;
   default:
     return col == RED ? HANZI_SHUAI : HANZI_JIANG;
   }
@@ -1430,29 +1400,37 @@ static void draw_piece(int f, int r) {
   uint32_t edge = rgb888(176, 136, 88);
 
   uint32_t txt = color_of(c) == RED ? rgb888(210, 30, 30) : rgb888(40, 40, 42);
-  for (int dy = -9; dy <= 9; ++dy) {
-    for (int dx = -9; dx <= 9; ++dx) {
+  // Enlarge the piece slightly so the 32x32 character has a small margin.
+  const int PR = 10 * SCALE;
+  const int PR2 = PR * PR;
+  const int PIR2 = (PR - SCALE - 1) * (PR - SCALE - 1);
+  for (int dy = -PR; dy <= PR; ++dy) {
+    for (int dx = -PR; dx <= PR; ++dx) {
       int r2 = dx * dx + dy * dy;
-      if (r2 > 81)
+      if (r2 > PR2)
         continue;
-      VRAM[(cy + dy) * 320 + (cx + dx)] = (r2 <= 64) ? wood : edge;
+      VRAM[(cy + dy) * SCREEN_W + (cx + dx)] = (r2 <= PIR2) ? wood : edge;
     }
   }
 
-  draw_hanzi(cx - 5, cy - 8, piece_hanzi(c), txt);
+  // Center the 32x32 Chinese character on the piece.
+  // The glyph visual center sits a couple of pixels below the 32x32 cell
+  // center, so we shift up by 2 px and right by 1 px for best alignment.
+  draw_hanzi(cx - 15, cy - 18, piece_hanzi(c), txt);
 }
 
 static void ring(int f, int r, uint32_t col) {
-  int x = X0 + f * CELL - 9, y = Y0 + r * CELL - 9;
-  for (int i = 0; i < 18; ++i) {
-    VRAM[y * 320 + x + i] = col;
-    VRAM[(y + 1) * 320 + x + i] = col;
-    VRAM[(y + 17) * 320 + x + i] = col;
-    VRAM[(y + 16) * 320 + x + i] = col;
-    VRAM[(y + i) * 320 + x] = col;
-    VRAM[(y + i) * 320 + x + 1] = col;
-    VRAM[(y + i) * 320 + x + 17] = col;
-    VRAM[(y + i) * 320 + x + 16] = col;
+  const int R = 10 * SCALE;
+  int x = X0 + f * CELL - R, y = Y0 + r * CELL - R;
+  for (int i = 0; i < 2 * R; ++i) {
+    VRAM[y * SCREEN_W + x + i] = col;
+    VRAM[(y + 1) * SCREEN_W + x + i] = col;
+    VRAM[(y + 2 * R - 1) * SCREEN_W + x + i] = col;
+    VRAM[(y + 2 * R - 2) * SCREEN_W + x + i] = col;
+    VRAM[(y + i) * SCREEN_W + x] = col;
+    VRAM[(y + i) * SCREEN_W + x + 1] = col;
+    VRAM[(y + i) * SCREEN_W + x + 2 * R - 1] = col;
+    VRAM[(y + i) * SCREEN_W + x + 2 * R - 2] = col;
   }
 }
 
@@ -1467,8 +1445,143 @@ static int ai_sel_f, ai_sel_r;
 static int ai_from_f, ai_from_r;
 static int depth;
 
+// Undo/redo state for one full round (RED move + AI move).
+struct TurnState {
+  uint8_t board[RANKS][FILES];
+  uint8_t piece_code[2][16];
+  uint8_t piece_f[2][16];
+  uint8_t piece_r[2][16];
+  int     piece_n[2];
+  int     king_f[2];
+  int     king_r[2];
+  uint64_t g_hash;
+  uint64_t rep_hash[128];
+  int     rep_len;
+
+  int     cx, cy;
+  bool    selected;
+  int     sel_f, sel_r;
+
+  bool    ai_highlight;
+  int     ai_from_f, ai_from_r;
+  int     ai_sel_f, ai_sel_r;
+
+  bool    in_check;
+  bool    game_over;
+  bool    player_won;
+
+  int     g_fullmove;
+  BookInfo g_last_book;
+
+  // source square of the RED piece that was moved from this state
+  int     red_from_f;
+  int     red_from_r;
+};
+
+static TurnState undo_stack[64];
+static int       undo_top = 0;
+static int       last_red_from_f = -1;
+static int       last_red_from_r = -1;
+
+static void save_state(TurnState &st) {
+  memcpy(st.board, board, sizeof(board));
+  memcpy(st.piece_code, piece_code, sizeof(piece_code));
+  memcpy(st.piece_f, piece_f, sizeof(piece_f));
+  memcpy(st.piece_r, piece_r, sizeof(piece_r));
+  memcpy(st.piece_n, piece_n, sizeof(piece_n));
+  memcpy(st.king_f, king_f, sizeof(king_f));
+  memcpy(st.king_r, king_r, sizeof(king_r));
+  st.g_hash = g_hash;
+  memcpy(st.rep_hash, rep_hash, sizeof(rep_hash));
+  st.rep_len = rep_len;
+  st.cx = cx; st.cy = cy;
+  st.selected = selected; st.sel_f = sel_f; st.sel_r = sel_r;
+  st.ai_highlight = ai_highlight;
+  st.ai_from_f = ai_from_f; st.ai_from_r = ai_from_r;
+  st.ai_sel_f = ai_sel_f; st.ai_sel_r = ai_sel_r;
+  st.in_check = in_check;
+  st.game_over = game_over;
+  st.player_won = player_won;
+  st.g_fullmove = g_fullmove;
+  st.g_last_book = g_last_book;
+  st.red_from_f = -1;
+  st.red_from_r = -1;
+}
+
+static void undo_clear() {
+  undo_top = 0;
+  last_red_from_f = -1;
+  last_red_from_r = -1;
+  save_state(undo_stack[0]);
+  undo_stack[0].red_from_f = -1;
+  undo_stack[0].red_from_r = -1;
+  undo_stack[0].ai_highlight = false;
+}
+
+// Called at the start of each RED turn to snapshot the state produced by
+// RED's last move and the AI response.  The previous top is annotated with
+// the source square of RED's move so that undoing puts the cursor there.
+static void undo_push_after_ai() {
+  if (undo_top + 1 >= (int)(sizeof(undo_stack) / sizeof(undo_stack[0])))
+    return;
+  undo_stack[undo_top].red_from_f = last_red_from_f;
+  undo_stack[undo_top].red_from_r = last_red_from_r;
+  ++undo_top;
+  save_state(undo_stack[undo_top]);
+  undo_stack[undo_top].red_from_f = -1;
+  undo_stack[undo_top].red_from_r = -1;
+}
+
+static void undo_one_turn() {
+  if (undo_top <= 0)
+    return;
+  --undo_top;
+  TurnState &st = undo_stack[undo_top];
+  memcpy(board, st.board, sizeof(board));
+  memcpy(piece_code, st.piece_code, sizeof(piece_code));
+  memcpy(piece_f, st.piece_f, sizeof(piece_f));
+  memcpy(piece_r, st.piece_r, sizeof(piece_r));
+  memcpy(piece_n, st.piece_n, sizeof(piece_n));
+  memcpy(king_f, st.king_f, sizeof(king_f));
+  memcpy(king_r, st.king_r, sizeof(king_r));
+  g_hash = st.g_hash;
+  memcpy(rep_hash, st.rep_hash, sizeof(rep_hash));
+  rep_len = st.rep_len;
+
+  selected = st.selected;
+  sel_f = st.sel_f;
+  sel_r = st.sel_r;
+  ai_highlight = st.ai_highlight;
+  ai_from_f = st.ai_from_f; ai_from_r = st.ai_from_r;
+  ai_sel_f = st.ai_sel_f; ai_sel_r = st.ai_sel_r;
+  in_check = st.in_check;
+  game_over = st.game_over;
+  player_won = st.player_won;
+  g_fullmove = st.g_fullmove;
+  g_last_book = st.g_last_book;
+
+  // Place RED cursor on the piece that was about to be moved from this state.
+  if (st.red_from_f >= 0 && st.red_from_r >= 0) {
+    cx = st.red_from_f;
+    cy = st.red_from_r;
+    selected = false;
+    n_legals = 0;
+  } else {
+    cx = st.cx;
+    cy = st.cy;
+  }
+  ai_thinking = false;
+}
+
+
 static void draw_status(const char *override = nullptr) {
-  fill_rect(0, 230, 320, 10, rgb888(20, 18, 14));
+  const int SY0 = 230 * SCALE;
+  const int SH = 10 * SCALE;
+  const int SY1 = SY0 + SH - 1;
+  fill_rect(0, SY0, SCREEN_W, SH, rgb888(20, 18, 14));
+  vline(292 * SCALE, SY0, SY1, rgb888(100, 100, 100));
+  vline(88 * SCALE, SY0, SY1, rgb888(100, 100, 100));
+
   const char *s = override;
   uint32_t color = rgb888(255, 255, 255);
 
@@ -1494,29 +1607,35 @@ static void draw_status(const char *override = nullptr) {
       color = rgb888(255, 160, 60);
   }
 
-  draw_text(4, 232, s, color);
-  draw_text(298, 232, "D:", rgb888(255, 255, 255));
-  draw_char(312, 232, (char)('0' + depth), rgb888(255, 255, 255));
+  draw_text(4 * SCALE, 232 * SCALE, s, color);
+  draw_text(298 * SCALE, 232 * SCALE, "D:", rgb888(255, 255, 255));
+  draw_char(312 * SCALE, 232 * SCALE, (char)('0' + depth), rgb888(255, 255, 255));
 }
 
 static void draw_board(bool redraw_piece = true) {
   const uint32_t line = rgb888(150, 130, 100);
 
   static bool Background_Init = false;
-  static bool Board_Piece_Buffer[320 * 240 * 4];
+  static uint8_t Board_Piece_Buffer[SCREEN_W * SCREEN_H * 4];
 
-  if (!Background_Init) {
-    memcpy(VRAM, Xiangqi_Background, 320 * 240 * 4);
+  auto draw_lines_and_marks = [&]() {
+    const int BO = 3 * SCALE;
+    const int BI = BO - 1;
+    const int BC = BO - 2;
 
-    hline(Y0 - 3, X0 - 3, X0 + 8 * CELL + 3, line);
-    hline(Y0 - 2, X0 - 2, X0 + 8 * CELL + 2, line);
-    hline(Y0 + 9 * CELL + 3, X0 - 3, X0 + 8 * CELL + 3, line);
-    hline(Y0 + 9 * CELL + 2, X0 - 2, X0 + 8 * CELL + 2, line);
+    hline(Y0 - BO, X0 - BO, X0 + 8 * CELL + BO, line);
+    hline(Y0 - BI, X0 - BI, X0 + 8 * CELL + BI, line);
+    hline(Y0 - BC, X0 - BC, X0 + 8 * CELL + BC, line);
+    hline(Y0 + 9 * CELL + BO, X0 - BO, X0 + 8 * CELL + BO, line);
+    hline(Y0 + 9 * CELL + BI, X0 - BI, X0 + 8 * CELL + BI, line);
+    hline(Y0 + 9 * CELL + BC, X0 - BC, X0 + 8 * CELL + BC, line);
 
-    vline(X0 - 3, Y0 - 3, Y0 + 9 * CELL + 3, line);
-    vline(X0 - 2, Y0 - 2, Y0 + 9 * CELL + 2, line);
-    vline(X0 + 8 * CELL + 3, Y0 - 3, Y0 + 9 * CELL + 3, line);
-    vline(X0 + 8 * CELL + 2, Y0 - 3, Y0 + 9 * CELL + 2, line);
+    vline(X0 - BO, Y0 - BO, Y0 + 9 * CELL + BO, line);
+    vline(X0 - BI, Y0 - BI, Y0 + 9 * CELL + BI, line);
+    vline(X0 - BC, Y0 - BC, Y0 + 9 * CELL + BC, line);
+    vline(X0 + 8 * CELL + BO, Y0 - BO, Y0 + 9 * CELL + BO, line);
+    vline(X0 + 8 * CELL + BI, Y0 - BO, Y0 + 9 * CELL + BI, line);
+    vline(X0 + 8 * CELL + BC, Y0 - BO, Y0 + 9 * CELL + BC, line);
 
     for (int r = 0; r <= RANKS - 1; ++r)
       hline(Y0 + r * CELL, X0, X0 + 8 * CELL, line);
@@ -1531,26 +1650,31 @@ static void draw_board(bool redraw_piece = true) {
     }
 
     for (int i = 0; i <= 2 * CELL; ++i) {
-      VRAM[(Y0 + i) * 320 + X0 + 3 * CELL + i] = line;
-      VRAM[(Y0 + i) * 320 + X0 + 5 * CELL - i] = line;
-      VRAM[(Y0 + 9 * CELL - i) * 320 + X0 + 3 * CELL + i] = line;
-      VRAM[(Y0 + 9 * CELL - i) * 320 + X0 + 5 * CELL - i] = line;
+      VRAM[(Y0 + i) * SCREEN_W + X0 + 3 * CELL + i] = line;
+      VRAM[(Y0 + i) * SCREEN_W + X0 + 5 * CELL - i] = line;
+      VRAM[(Y0 + 9 * CELL - i) * SCREEN_W + X0 + 3 * CELL + i] = line;
+      VRAM[(Y0 + 9 * CELL - i) * SCREEN_W + X0 + 5 * CELL - i] = line;
     }
 
     auto draw_mark = [&](int x, int y, bool l = true, bool r = true) {
-      vline(X0 + x * CELL - 2, Y0 + y * CELL - 4, Y0 + y * CELL - 2, line);
-      vline(X0 + x * CELL + 2, Y0 + y * CELL - 4, Y0 + y * CELL - 2, line);
-      vline(X0 + x * CELL - 2, Y0 + y * CELL + 2, Y0 + y * CELL + 4, line);
-      vline(X0 + x * CELL + 2, Y0 + y * CELL + 2, Y0 + y * CELL + 4, line);
+      const int MO = 2 * SCALE;
+      const int ML = 4 * SCALE;
+      int gx = X0 + x * CELL;
+      int gy = Y0 + y * CELL;
+
+      vline(gx - MO, gy - ML, gy - MO, line);
+      vline(gx + MO, gy - ML, gy - MO, line);
+      vline(gx - MO, gy + MO, gy + ML, line);
+      vline(gx + MO, gy + MO, gy + ML, line);
 
       if (l) {
-        hline(Y0 + y * CELL - 2, X0 + x * CELL - 4, X0 + x * CELL - 2, line);
-        hline(Y0 + y * CELL + 2, X0 + x * CELL - 4, X0 + x * CELL - 2, line);
+        hline(gy - MO, gx - ML, gx - MO, line);
+        hline(gy + MO, gx - ML, gx - MO, line);
       }
 
       if (r) {
-        hline(Y0 + y * CELL - 2, X0 + x * CELL + 2, X0 + x * CELL + 4, line);
-        hline(Y0 + y * CELL + 2, X0 + x * CELL + 2, X0 + x * CELL + 4, line);
+        hline(gy - MO, gx + MO, gx + ML, line);
+        hline(gy + MO, gx + MO, gx + ML, line);
       }
     };
 
@@ -1570,38 +1694,40 @@ static void draw_board(bool redraw_piece = true) {
     draw_mark(4, 6);
     draw_mark(6, 6);
     draw_mark(8, 6, true, false);
+  };
 
-    memcpy(Xiangqi_Background, VRAM, 320 * 240 * 4);
-    Background_Init = true;
-  }
-
-  if (redraw_piece) {
-    memcpy(VRAM, Xiangqi_Background, 320 * 240 * 4);
+  if (!Background_Init || redraw_piece) {
+    memcpy(VRAM, Xiangqi_Background, BG_WIDTH * BG_HEIGHT * 4);
+    draw_lines_and_marks();
     for (int r = 0; r < RANKS; ++r)
       for (int f = 0; f < FILES; ++f)
         draw_piece(f, r);
-    memcpy(Board_Piece_Buffer, VRAM, 320 * 240 * 4);
+    memcpy(Board_Piece_Buffer, VRAM, SCREEN_W * SCREEN_H * 4);
+    Background_Init = true;
   } else {
-    memcpy(VRAM, Board_Piece_Buffer, 320 * 240 * 4);
+    memcpy(VRAM, Board_Piece_Buffer, SCREEN_W * SCREEN_H * 4);
   }
 
   if (selected) {
     for (int i = 0; i < n_legals; ++i)
-      fill_rect(X0 + legals[i].to_f * CELL - 3, Y0 + legals[i].to_r * CELL - 3, 6, 6, rgb888(80, 255, 120));
-    ring(sel_f, sel_r, rgb888(120, 220, 255));
+      fill_rect(X0 + legals[i].to_f * CELL - 3 * SCALE, Y0 + legals[i].to_r * CELL - 3 * SCALE,
+                6 * SCALE, 6 * SCALE, rgb888(80, 255, 120));
+    ring(sel_f, sel_r, rgb888(255, 120, 120));
   }
 
   if (ai_highlight) {
+    const uint32_t black_sel = rgb888(100, 100, 100);
+    const int R = 3 * SCALE;
     int x = X0 + ai_from_f * CELL, y = Y0 + ai_from_r * CELL;
-    for (int dy = -3; dy <= 3; ++dy)
-      for (int dx = -3; dx <= 3; ++dx)
-        if (dx * dx + dy * dy <= 9)
-          VRAM[(y + dy) * 320 + (x + dx)] = rgb888(255, 160, 60);
-    ring(ai_sel_f, ai_sel_r, rgb888(255, 160, 60));
+    for (int dy = -R; dy <= R; ++dy)
+      for (int dx = -R; dx <= R; ++dx)
+        if (dx * dx + dy * dy <= R * R)
+          VRAM[(y + dy) * SCREEN_W + (x + dx)] = black_sel;
+    ring(ai_sel_f, ai_sel_r, black_sel);
   }
 
   if (!ai_thinking)
-    ring(cx, cy, rgb888(255, 255, 120));
+    ring(cx, cy, rgb888(255, 120, 120));
 }
 
 static void new_game() {
@@ -1623,6 +1749,8 @@ static void new_game() {
   cx = 4;
   cy = 8;
 
+  undo_clear();
+
   tcm_ascii_console_clear();
 
   printf("===== Chinese Chess vs AI =====\n");
@@ -1631,7 +1759,8 @@ static void new_game() {
   printf("  ----------  -----------------------------\n");
   printf("  %-11s  %s\n", "Arrows", "Move cursor");
   printf("  %-11s  %s\n", "Enter", "Select piece / move");
-  printf("  %-11s  %s\n", "Backspace", "Cancel selection");
+  printf("  %-11s  %s\n", "C", "Cancel selection");
+  printf("  %-11s  %s\n", "Backspace", "Undo one round");
   printf("  %-11s  %s\n", "R", "Restart game");
   printf("  %-11s  %s\n", "Q", "Quit");
   printf("  %-11s  %s\n", "1-4", "AI search depth (default 3)");
@@ -1641,18 +1770,18 @@ static void new_game() {
 }
 
 static void ai_progress(int progress, int max) {
-  fill_rect(90, 232, 200, 7, rgb888(60, 60, 60));
-  fill_rect(90, 232, progress * 200 / max, 7, rgb888(255, 160, 60));
+  fill_rect(90 * SCALE, 232 * SCALE, progress * 200 * SCALE / max, 7 * SCALE, rgb888(255, 160, 60));
 }
 
 int main() {
   tcm_ascii_console_init();
-  VRAM = (uint32_t *)tcm_pixel_console_init(CONSOLE_MODE_PIXEL_32, 320);
+  VRAM = (uint32_t *)tcm_pixel_console_init(CONSOLE_MODE_PIXEL_32, SCREEN_W);
   tcm_pixel_console_clear();
   depth = 3;
   new_game();
   uint32_t last_code = 0;
   bool player_moved = false;
+  bool restart_game = false;
   draw_board();
   draw_status();
 
@@ -1665,6 +1794,7 @@ int main() {
     if (fresh) {
       if (code == 'r' || code == 'R') {
         new_game();
+        restart_game = true;
       } else if (code >= '1' && code <= '4') {
         depth = code - '0';
         printf("AI depth: %d\n", depth);
@@ -1704,6 +1834,8 @@ int main() {
                 }
               if (is_legal) {
                 Move mv = {(int8_t)sel_f, (int8_t)sel_r, (int8_t)cx, (int8_t)cy};
+                last_red_from_f = sel_f;
+                last_red_from_r = sel_r;
                 uint8_t moving = board[sel_r][sel_f];
                 rep_hash[rep_len++] = g_hash;
                 make_move(mv, moving, board[cy][cx]);
@@ -1730,7 +1862,15 @@ int main() {
               }
             }
           }
-        } else if (code == __TCM_KEY_CODE_BACKSPACE || code == 'x' || code == 'X') {
+        } else if (code == __TCM_KEY_CODE_BACKSPACE) {
+          if (selected) {
+            selected = false;
+            n_legals = 0;
+          } else if (undo_top > 0) {
+            undo_one_turn();
+            restart_game = true;
+          }
+        } else if (code == 'c' || code == 'C') {
           selected = false;
           n_legals = 0;
         }
@@ -1760,7 +1900,7 @@ int main() {
         ai_from_f = best.from_f;
         ai_from_r = best.from_r;
         if (g_last_book.hit)
-          printf("BLK BOOK[%d/%c] %c %c%d->%c%d\n", g_last_book.idx, g_last_book.choice ? '1' : '0',
+          printf("BLK BOOK[0x%08x/%d/%d] %c %c%d->%c%d\n", g_last_book.lock, g_last_book.ncand, g_last_book.choice,
                  PIECE_LETTER[type_of(moving)], 'a' + best.from_f, 9 - best.from_r, 'a' + best.to_f, 9 - best.to_r);
         else
           printf("BLK %c %c%d->%c%d\n", PIECE_LETTER[type_of(moving)], 'a' + best.from_f, 9 - best.from_r,
@@ -1785,14 +1925,18 @@ int main() {
         // draw_board();
         draw_status();
       }
+
+      if (!game_over)
+        undo_push_after_ai();
     }
 
     if (fresh) {
-      draw_board(player_moved);
+      draw_board(player_moved || restart_game);
       draw_status();
     }
 
     player_moved = false;
+    restart_game = false;
   }
 
   tcm_pixel_console_clear();
